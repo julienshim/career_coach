@@ -1,0 +1,7 @@
+# career_coach is one tree, two layers.
+# Tracked (the product, shareable, zero personal data): AGENTS.md, README.md,
+#   MANIFEST.schema.md, hats/, standards/.
+# Gitignored (the instance, per-user, private): everything the user owns,
+#   all of it under instance/.
+/instance/
+.DS_Store
