@@ -18,6 +18,7 @@
 - `instance/career-map/skills/` — technical, domain, methodologies.
 - `instance/resume/` — the default resume (`resume_default`, resolved via `instance/MANIFEST.md`). Per-application tailoring is copy, tailor, rename.
 - `instance/career-map/resume_components/story_bank.md` — the stable Q&A answers.
+- `instance/market-intel.md` — external market signals (AI screening, apply-timing, stale postings); consult before a stale-posting skip and when sizing portal answers for an AI-scored form.
 - `standards/STANDARDS.md` — the answer voice, the operating rules.
 
 **The process.**
@@ -33,13 +34,18 @@
    - Experience match (1-5): years, scope, complexity, leadership.
    - Title alignment (1-5): target titles and whether the actual work matches.
 4. **Resume call.** Default `resume_default` as-is (resolved via `instance/MANIFEST.md`). A named honest keyword only if the JD asks by title. Per-application tailoring is copy, tailor, rename. Web scraping is on the default's skills line (a real hands-on asset — the user's scraping assets, see the `evidence` catalog); the depth is oral — the evidence ceiling is in `instance/resume/README.md`.
-5. **Q&A** only when the user asks or the portal question is known. Assemble from the story bank in the locked voice, from each entry's application cut (≤120 words, form-length) — when a cut is missing, compose it from the full answer, never in the interview register. No speculative drafts. `QA.md` holds application portal answers only — short, form-length, what the company receives. Interview answers live in `instance/interviews/<co>/`. Present every draft to the user for review; `QA.md` is written only after the user approves and submits.
+5. **Q&A** only when the user asks or the portal question is known. **Ask the input type when it isn't given** (ask, don't infer) — for each question the user hasn't described, ask whether it's a **textarea** (multi-line), a **text input** (single line), or **character-limited** — because the field sets the length. Size to the field (flexible defaults, not hard limits):
+   - **Textarea:** ~100–150 words when a developed answer fits (the default).
+   - **Text input (single line):** ~15–40 words, concise and direct.
+   - **Character-limited:** fit the stated limit; prioritize the most relevant.
+   
+   The employer's stated word count or limit always wins; field type and visible size are clues, not commands. A screening question may need one sentence; an experience / motivation / behavioral question needs more. Assemble from the story bank in the locked voice, from each entry's application cut — expand from the same evidence, never pad; when a cut is missing, compose it from the full answer, never in the interview register. Relevance over length: specific, truthful, no filler to hit a target. The user may override length/tone/detail unless it conflicts with the employer's stated requirement. No speculative drafts. `QA.md` holds application portal answers only — form-length, what the company receives. Interview answers live in `instance/interviews/<co>/`. Present every draft to the user for review; `QA.md` is written only after the user approves and submits.
 6. **User submits.** The agent does not submit.
 7. **Log.** `instance/ledger.tsv` (dated row plus link) and `instance/resume/QA.md` (a section per company). A ledger row is written only after the user confirms the application was submitted — the ledger records what exists with the company, not intentions. No user PII in the ledger (name, contact, citizenship/immigration status) — it is cloud-synced; personal constants live in `instance/profile.md`.
 
 **The run (the sequence with the user — the user never idles on agent work).**
 1. User sends the batch → the agent runs Steps 0-4 and outputs the grouped calls plus the resume call per apply candidate. No file writes.
-2. User picks the applies → the agent outputs, per company, every known portal question with a short draft answer (the story bank's application cut; a tick-box pick where the form is one) in one compact block. No file writes.
+2. User picks the applies → the agent outputs, per company, every known portal question with a short draft answer (the story bank's application cut; a tick-box pick where the form is one), asking the input type for any question the user hasn't described and sizing per the field-type guide in Step 5, in one compact block. No file writes.
 3. User edits in chat and submits in the portal. The agent's turn ends here — the user works, nothing runs.
 4. User confirms submission → the agent writes everything in one parallel batch: the ledger rows, the QA.md sections (the user's final wording verbatim), the sourcing log row.
 

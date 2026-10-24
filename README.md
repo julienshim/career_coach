@@ -74,6 +74,8 @@ OpenCode is where the work happens: the directory holds the pieces, `AGENTS.md` 
 
 Sessions are disposable. A clean session — a fresh agent, an empty conversation — reaches full working context from the files alone: `AGENTS.md` starts it, the manifest and the standards orient it, the hat's SOP tells it the procedure, and the hat's log tells it where it left off. The conversation is a workspace, not a record. Anything that matters is written at a run boundary, so a compacted or dead session loses nothing the files don't hold; the next session simply re-runs the last boundary.
 
+**When to close a session and start fresh:** watch the agent's reasoning as the real-time signal. A clean finish — or the first sign of drift (re-deriving what the files already hold, over-confirming, narrating the user) — is the cue to close and start clean. A fresh session begins without the drift, because the state is in the files, not the conversation.
+
 ## The hats
 | Hat | Job |
 |---|---|

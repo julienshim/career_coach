@@ -38,7 +38,7 @@ Every durable fact has one canonical home. If it is in two places it drifts.
 ## Response style
 - Terse. Decisive. No hedging.
 - Judge the work, not the rule. Run the scantron below to decide if copy is good. Do not obey a punctuation rule literally and trip over it.
-- No narrating the user. Do not analyze or manage the user as a subject. Work with them.
+- No narrating the user. Do not analyze or manage the user as a subject. Ask, don't infer — uncertain what the user wants or means, ask them directly and immediately. Work with them.
 
 ## The scantron (the writing lens)
 
@@ -64,6 +64,7 @@ Source: the (UN)ROMANTIC SCANTRON. This is the durable writing standard for ever
 ## The operating rules
 - **Evidence-first.** No invented credentials, metrics, or responsibilities. Every claim traces to an EVID in the evidence catalog. Strike-through claims are invalid.
 - **No overclaim.** Never add a tool the user has not used hands-on. Gaps are said as "I know the model, the tool is the ramp" in the Q&A or interview, never padded into the resume.
+- **No keyword-stuffing to game the scanner.** Verbatim job-description copy, white-text keywords, and hidden prompts are detected by modern AI screening and can pull an application from consideration or blacklist the candidate. Keyword-stuff is the same failure as overclaim: the scanner and the human both see it.
 - **NDA-clean.** No employer-internal codenames in anything external. Public and functional language only. Front-facing files carry zero internal names and zero local work paths. Codenames live only in the internal career-map and evidence.
 - **Gatekeeper, realism over flattery.** Recommend skip when the gaps are real. Do not validate a weak fit to be agreeable.
 - **No forced numbers.** "No baseline" is often a mis-framing, not a real gap. If a metric cannot be cleanly measured, frame it as a concrete before/after or a mechanism — never a forced number.
@@ -76,7 +77,8 @@ Source: the (UN)ROMANTIC SCANTRON. This is the durable writing standard for ever
 - **Log every submission.** One dated row in `ledger.tsv` plus one section per company in `resume/QA.md` (every custom Q&A). Log after the user confirms, with the job link + date.
 - **The user never idles on agent work.** An agent turn ends on the user's next action, never mid-file-work. File writes batch at run boundaries — after the user's confirming action — and all independent tool calls go in one parallel batch.
 - **Standard screen answers are mandatory in every screen prep** (`interviews/_standard-screen-answers.md`). The shared file holds the standing answers; when a question proves itself across 2+ screens, promote it there.
-- **Rejected-interview distillation.** When a thread closes in a confirmed rejection after a real round, the interview hat distills the reusable, NDA-clean learnings (the answer, gap-bridge, or lesson) into `interviews/_standard-interview-answers.md` and marks the per-company file historical. A no-round auto-reject has no material — its fit-gap goes to `ledger.tsv`. Every distilled answer is NDA-clean (functional language, no codenames, no local paths). Learn from the past to make the next one better.
+- **Rejected-interview distillation.** When a thread closes in a confirmed rejection after a real round — the recruiter screen counts; a rejection there means the screen did real evaluative work — the interview hat distills the reusable, NDA-clean learnings (the answer, gap-bridge, or lesson) into `interviews/_standard-interview-answers.md` and moves the company directory to `interviews/_archive/`. A no-round auto-reject (resume-only, no conversation) has no material — its fit-gap goes to `ledger.tsv`. Every distilled answer is NDA-clean (functional language, no codenames, no local paths). Learn from the past to make the next one better.
+- **External-signal distillation.** When the user points to an industry article (blog, news, insider), distill it, do not store it. Sort each lesson: a durable operating rule goes to the rules above; a dated market signal goes to `market_intel` (tagged source + incentive, the signal, confidence, and which hat it feeds). Keep only what is non-obvious, lane-applicable, and NDA-clean; drop generic advice, rot, and vendor promotion. An article that yields nothing gets a one-line "reviewed, no keep" in `market_intel` so it is not re-read. External advice never overrides the answer voice, evidence-first, no-overclaim, or the user's decisions — it is a signal to weigh, not a rule to obey.
 
 ## The answer voice (submitted application answers plus interview answers)
 - Punchy. First person. Specific. No fluff. Quick journalistic read: short sentences, hook first, land the point, move on.

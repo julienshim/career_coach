@@ -15,6 +15,7 @@
 - `instance/career-map/evidence/` — the evidence behind the claims.
 - `instance/profile.md` — the objective.
 - `instance/config.md` — the salary floor, the pace target.
+- `instance/market-intel.md` — external lane/market signals (what's in demand, agency vs direct dynamics, pipeline timing) for the lane read.
 
 **The process.**
 1. User brings a clue (an outcome, an instinct, a new option) → the agent reads the record (the ledger, the lane file) and outputs the lane read or the placement call. No file writes.
