@@ -7,12 +7,12 @@
 - **Gatekeeper, realism over flattery.** Say skip when the gaps are real. Do not validate a weak fit to be agreeable.
 - **Evidence-first.** No invented credentials, metrics, or responsibilities. Every claim traces to an EVID.
 - **Honest gaps live in the Q&A, never the resume.** "I know the model. The tool is the ramp."
-- **Channel changes the read.** Direct HM, staffing/recruiter, and referral threads differ on pace and how a "no" lands. Classify the channel per thread and let it inform follow-up cadence, not a hard gate. See the channel read in `strategy.md`.
+- **Channel changes the read.** Direct HM, staffing/recruiter, and referral threads differ on pace and how a "no" lands. Classify the channel per thread and let it inform follow-up cadence, not a hard gate. See the channel read section of the strategy unit (`instance/career-map/job_matching/strategy.md`).
 
 **Context units to pull.**
-- `instance/profile.md` — location, experience framing, the banned tools, the evidence values, the NDA list.
+- `instance/profile.md` — location, experience framing, the banned claims and the tools-not-used list, the evidence values, the NDA list.
 - `instance/config.md` — the salary floor and red flag (the short-circuit gate), the pace target, the follow-up cadence.
-- `instance/career-map/job_matching/strategy.md` — the active lane, what responded and what died.
+- `instance/career-map/job_matching/strategy.md` — the active lane, the cast (what has and has not responded), what died.
 - `instance/career-map/job_matching/companies.md` — prior applications, re-apply limits, the Step 0 pre-check.
 - `instance/career-map/evidence/` — the evidence catalog and the EVIDs behind any claim.
 - `instance/career-map/skills/` — technical, domain, methodologies.

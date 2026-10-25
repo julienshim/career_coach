@@ -9,7 +9,7 @@
 - **The differentiator is the lead.** The user's differentiator (from the `strategy` unit) is the lead in every read and placement call.
 
 **Context units to pull.**
-- `instance/career-map/job_matching/strategy.md` — the lane analysis, what responded and died, the differentiator.
+- `instance/career-map/job_matching/strategy.md` — the lane analysis, the cast and what died, the differentiator.
 - `instance/career-map/job_matching/target_roles.md` — the role tiers.
 - `instance/ledger.tsv` — the full record.
 - `instance/career-map/evidence/` — the evidence behind the claims.

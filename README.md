@@ -1,32 +1,28 @@
 # Career Coach
 
-_A career coach for the people behind the machine._
+A career coach built around the person, not just the job search.
 
-Career Coach is a system that turns a person's raw material — their code, their work history, their own words — into a durable career brain. It uses that brain to run the job search: finding the right roles, preparing the applications, working the interviews, keeping the record.
+Career Coach turns a person’s work history, code, and own words into a persistent career profile. It uses that context to manage the job search: identifying relevant roles, preparing applications, supporting interview prep, and tracking progress.
 
-Each search builds on the last. The history, the skills, the goals stay useful as circumstances change. **The mechanism is the product; a person is the instance.**
+Each search adds to the last. Experience, skills, and goals carry forward as a person’s priorities and circumstances change. **The system is consistent; the context is personal.**
 
 ## Why I built this
 
-I've tried building versions of this before. The idea is to make career guidance more accessible to people who might not otherwise have it, especially those whose work happens behind the scenes of the tech industry.
+I've tried building versions of this before. The idea is to make career guidance more accessible to people who keep the tech industry running behind the scenes: the people who label data, train AI models, moderate content, and do the contract and outsourced work that makes it all possible.
 
-The people who label data, train AI models, moderate content, and do the contract and outsourced work that helps keep this industry running.
+One estimate that stuck with me is that data collection, preparation, and annotation can account for around 80% of the time in an AI project. A 2024 typology of AI data work traces this figure to industry research. It's not a measure of how many people work behind the scenes, but it highlights just how much human effort goes into building what eventually looks automated.
 
-One estimate that stuck with me: data collection, preparation, and annotation can account for around 80% of the time in an AI project. A 2024 typology of AI data work carries the figure, tracing it to industry research rather than claiming it as its own finding. It's not a measure of how many workers are hidden behind technology, but it says something about how much human effort goes into building what eventually looks automated.
+Earlier versions of this idea never quite came together. As AI models became more capable and accessible, the vision started to feel more achievable. Not solved, but closer.
 
-I kept coming back to this idea, but earlier versions never quite got where I wanted them to go. As AI models became more widely available, parts of the original vision started to feel more achievable. Not solved, just closer.
+The limitations still matter. AI can't fully understand someone's circumstances or workplace dynamics, and it can get things wrong. There's also a contradiction I'm still working through: the people this project aims to help may be the least likely to have access to the tools, hardware, or technical knowledge needed to use it.
 
-AI still has its limits. It can offer advice without understanding someone's full circumstances, the workplace dynamics they're navigating, or the things they may not know how to put into words. It can get things wrong, and access to capable models can come at a cost. Those limitations matter when the goal is to help people make decisions about their lives.
+Building something useful is one challenge. Making it genuinely accessible is another, and I haven't figured that part out yet.
 
-There's also a contradiction in this project that I'm still working through. The people I'd most like this to help may be the least likely to have access to the tools, hardware, or technical knowledge needed to run it. Building it is one thing. Making it genuinely accessible to the people it's meant for is another.
+The goal is to help people recognize their skills, articulate their experience, and find paths forward, especially if they lack a mentor, a professional network, or someone in their corner.
 
-I don't have that part figured out yet. But it's worth keeping that gap in view as the project develops.
+I don't expect a career coach to solve every problem at work. But it can offer a starting point for people who might otherwise go without guidance.
 
-The goal is to build something that helps people recognize the skills they've developed, put their experience into words, and find paths forward. Something useful to someone who doesn't have a mentor, a strong professional network, or someone in their corner helping them figure out what's next.
-
-I don't expect a career coach to solve every problem people face at work. I do think it can help make guidance more accessible and give people a better starting point.
-
-This project is dedicated to the people behind the machine, and to the idea that the people who help build the future deserve opportunities within it.
+This project is dedicated to the people behind the machine, and to the idea that those who help build the future deserve opportunities within it.
 
 ## Further Reading
 
@@ -52,9 +48,10 @@ career_coach/
 └── instance/              # one person's data — private, gitignored
     ├── MANIFEST.md        # the registry — concepts → paths
     ├── profile.md         # who the user is (facts)
-    ├── config.md          # the user's tunables (settings)
-    ├── career-map/        # the brain — identity, evidence, strategy
-    ├── evidence-code/     # the receipts — read-only
+     ├── config.md          # the user's tunables (settings)
+     ├── market-intel.md    # distilled external signals (dated, tagged)
+     ├── career-map/        # the brain — identity, evidence, strategy
+    ├── evidence-code/     # the receipts — agent-off-limits (standards)
     ├── resume/            # resumes + submitted Q&A
     ├── interviews/        # per-company game plans
     ├── social-media/      # surface specs
@@ -64,108 +61,112 @@ career_coach/
 
 ## How it works
 
-I wanted one place to start, so `AGENTS.md` became the entry point. It picks the hat for the task. Each hat knows which context units it needs and what it should produce; it reads what the work calls for, never the whole directory.
+I wanted a single place to start, so AGENTS.md became the entry point. It selects the hat for the task. Each hat knows which context units it needs and what it must produce. It loads only what the work calls for, never the entire directory.
 
-The shared rules live in `standards/STANDARDS.md` — the scantron, the operating rules, the answer voice, the context-unit schemas. They belong to the mechanism, not to any user or instance.
+Shared rules live in standards/STANDARDS.md: the scantron, operating rules, answer voice, and context-unit schemas. These belong to the mechanism, not to any particular user or instance.
 
-The mechanism names concepts. Each instance has its own `MANIFEST.md` that maps those concepts to actual files, so the mechanism never needs to know where anything lives in a given instance.
+The mechanism defines concepts; each instance provides a MANIFEST.md that maps those concepts to actual files. This keeps the mechanism independent of any instance's layout. It knows what to look for, not where a particular instance keeps it.
 
-OpenCode is where the work happens: the directory holds the pieces, `AGENTS.md` gets things started, and the hat brings in what it needs. I keep the context deliberate — the AI doesn't read everything just because it's there.
+In the reference setup the work happens in an OpenCode session. The directory holds the pieces, AGENTS.md starts the process, and the selected hat loads what it needs. Context is deliberate: the AI doesn't read everything simply because it's available.
 
-Sessions are disposable. A clean session — a fresh agent, an empty conversation — reaches full working context from the files alone: `AGENTS.md` starts it, the manifest and the standards orient it, the hat's SOP tells it the procedure, and the hat's log tells it where it left off. The conversation is a workspace, not a record. Anything that matters is written at a run boundary, so a compacted or dead session loses nothing the files don't hold; the next session simply re-runs the last boundary.
+**Sessions are disposable.** A clean session—a fresh agent with an empty conversation—can reconstruct its full working context from files alone. AGENTS.md provides the entry point; the manifest and standards establish the environment; the hat's SOP defines the procedure; and the hat's log records where work left off. The conversation is a workspace, not a record. Anything that matters is persisted at a run boundary, so a compacted or terminated session loses nothing that the files don't already hold. The next session simply resumes from the last recorded boundary.
 
-**When to close a session and start fresh:** watch the agent's reasoning as the real-time signal. A clean finish — or the first sign of drift (re-deriving what the files already hold, over-confirming, narrating the user) — is the cue to close and start clean. A fresh session begins without the drift, because the state is in the files, not the conversation.
+**When to close a session and start fresh:** the signs of drift and the handoff duties are in `The session boundary` below. The short version: close at a clean finish or at the first signs of drift — the state lives in the files, not the conversation.
 
 ## The hats
 | Hat | Job |
 |---|---|
-| Architect | Something is mis-placed, smeared, or will bias the next agent. Audit the mechanism. You name; someone executes |
+| Architect | Something is mis-placed, smeared, or will bias the next agent. Audit the mechanism. You name; after approval, you execute the batch |
 | Sourcing | A new JD or batch. Apply/skip, resume call, Q&A, logging |
 | Interview | An active company's interview. Build the game plan in the user's voice |
 | Presence | The public surfaces. One voice, three registers |
 | Strategy | The lane read, the placement call, "your instinct is off" |
 | Discovery | Onboard a new user. Turn raw material into evidence and a career-map |
 
-## How it evolved
+## Common operations
 
-The system evolved by solving problems as they became clear. Each change made the structure simpler, clarified where information belonged, and made the product more reliable for both the user and the agent working with it.
+What to say, and which hat picks it up:
 
-### 1. From one file to two layers
-Originally, everything lived in a single session file. It held progress, preferences, rules, locations, salary, limits, and decisions.
+- "Here is a JD" (or a batch) → **Sourcing** — apply/skip, the resume call, the Q&A, the logging.
+- "I have an interview at X" → **Interview** — the game plan, in your voice.
+- "X answered — here is the outcome" → the outcome is logged (the ledger row, the thread hub README): an application-stage event by **Sourcing**; a round outcome by **Interview**, which on a confirmed rejection also runs the distillation.
+- "Update my LinkedIn / GitHub / portfolio" → **Presence** — one voice, three registers.
+- "Where is the search going? Should I keep pushing X?" → **Strategy** — the lane read, the placement call.
+- "Something in the brain feels off" → **Architect** — the audit.
+- "Set up a new brain" → **Discovery** — a new user's instance.
+- "Here is an article / a signal" → the external-signal distillation (standards) — a durable rule or a dated `market_intel` line.
 
-This made the system easy to start with, but difficult to maintain. Information became mixed together, and an agent starting fresh had no reliable way to know which details were current.
+The agent-facing routing table is in `AGENTS.md`; this list is for the human.
 
-The first major decision was to separate the product from the person using it.
+## How the System Evolved
 
-The **mechanism** contains the reusable parts: the one door (AGENTS.md), the hats, the standards, and the registry contract. The **instance** contains one user's private data and preferences.
+The system evolved by addressing problems as they surfaced. Each change clarified the separation between the reusable mechanism and the user’s data, reduced duplication, and made the agent’s behavior more predictable.
 
-This made the product reusable without carrying one user's information into another person's setup.
+### 1. Separating the mechanism from the user
 
-### 2. Removing the session file
-Once the two layers were in place, the session file was no longer needed.
+Initially, everything lived in a single session file: progress, preferences, rules, locations, salary, limits, and decisions. This was easy to start with but difficult to maintain. Information became mixed together, and a fresh agent had no reliable way to determine what was current.
 
-Its contents were moved to their proper homes. Progress went into the per-hat logs and ledger. Writing style and answer voice went into the shared standards. File locations went into the manifest, personal details into the profile, and limits into the companies unit.
+The first change was to separate the **mechanism** from the **instance**. The mechanism defines the reusable system: the entry point (`AGENTS.md`), the hats, shared standards, and registry contract. The instance holds one user’s data and preferences.
 
-The session file was deleted. Instead of relying on one file to remember everything, the agent now rebuilds its working context from the records relevant to the task.
+This made the system reusable without carrying personal information into another user’s setup.
 
-### 3. Giving every fact a home
-Splitting the files solved one problem, but introduced another: information could still end up in multiple places.
+### 2. Replacing session memory with structured records
 
-When the same fact exists in two files, those copies can drift apart. An agent might update one and continue using the other.
+Once the separation was established, the session file was no longer necessary. Its contents moved to dedicated homes: progress to per-hat logs and the ledger, writing conventions to shared standards, file locations to the manifest, personal details to the profile, and limits to the relevant companies unit.
 
-To prevent this, the standards now define where each type of information belongs and where it should not be stored.
+The agent now rebuilds its working context from the records relevant to each task rather than relying on a single file to remember everything.
 
-Every durable fact has one canonical home. Other files can refer to it, but should not maintain competing versions of the same information.
+### 3. Establishing a single source of truth
 
-### 4. Separating file locations from the mechanism
-The reusable parts of the system initially risked becoming tied to one user's file structure.
+Distributing information across files solved the original problem but created a risk of duplication. When the same fact appears in multiple places, copies can drift apart.
 
-The solution was to introduce a registry and a per-user manifest. The mechanism refers to concepts, while the manifest tells it where the corresponding files live.
+The standards now define where each type of information belongs. Every durable fact has one canonical home; other files may reference it but should not maintain competing versions.
 
-This means the hats do not need to know a user's directory structure. A different instance can use a completely different layout without changing the underlying product.
+The same principle applies to the system’s architecture. The registry defines the available resources, while the per-user manifest maps them to actual file locations. The mechanism works with those references rather than depending on a particular directory structure.
 
-### 5. Bringing the shared rules together
-As the system grew, its writing rules, operating instructions, answer voice, and context schemas needed a consistent home.
+### 4. Centralizing shared standards
 
-These were brought together in a single standards file that every hat follows.
+As the system grew, its writing conventions, operating rules, answer voice, and context schemas needed a consistent home. These were consolidated into a shared standards file that every hat follows.
 
-The goal was to define shared behavior once, rather than let each hat develop its own interpretation of the same rules. Individual hats can focus on their specific jobs while relying on the same standards.
+Instead of interpreting the same rules independently, each hat relies on the same definitions and focuses on its specific responsibilities.
 
-### 6. Turning each hat into a procedure
-A role description alone was not enough to make an agent's behavior predictable. It could explain what a hat was responsible for without clearly defining what to do first, what information to consult, when to involve the user, or when to write changes to files.
+### 5. Turning roles into procedures
 
-Each hat was therefore developed into a standard operating procedure.
+Role descriptions alone did not make agent behavior predictable. They explained what a hat was responsible for without necessarily defining what information to consult, what steps to follow, when to involve the user, or what changes it could make.
 
-A hat now defines its role, the lens it uses, the context it needs, the steps it follows, where user decisions are required, what it can write, and what its final output must contain.
+Each hat was therefore developed into a standard operating procedure covering its role, working perspective, required context, sequence of steps, user decision points, write permissions, and expected output.
 
-This gives the agent a defined process to follow instead of leaving important decisions to interpretation.
+This replaced loosely defined responsibilities with an explicit process.
 
-### 7. Removing user details from the product
-A later audit found personal details embedded in the supposedly reusable mechanism. These included a name, role, numerical values, employer, and project information.
+### 6. Removing personal assumptions from the mechanism
 
-That meant anyone cloning the product could inherit assumptions that belonged to someone else.
+A later audit found user-specific details embedded in shared files, including a name, role, numerical values, employer, and project information. Anyone reusing the system could therefore inherit assumptions that did not apply to them.
 
-Those details were removed from the shared files and replaced with references to the appropriate instance data.
+These details were removed from the mechanism and replaced with references to instance data. The mechanism defines what information is needed and how to retrieve it; the instance supplies the values.
 
-The mechanism now defines what information is needed and how to retrieve it, while the instance supplies the actual values.
+### 7. Separating personal settings from personal records
 
-### 8. Splitting settings from records
-A later pass found the instance carrying two different kinds of content: the records of what we know about the person, and the person's choices about how the mechanism should behave. The salary floor, the application pace, the follow-up cadence — preferences, not facts — were buried in the profile and the strategy, or written into the shared standards where no user's preference belongs.
+The final distinction was between **what is known about the user** and **how the user wants the system to operate**.
 
-The instance now keeps them apart: the records in the career-map and the ledger, the tunables in a single config file the person can review in one glance. The mechanism reads the config; the person owns it.
+Previously, settings such as salary floors, application pace, and follow-up cadence were mixed into profiles, strategy documents, or shared standards. These are configurable preferences, not personal facts or universal rules.
+
+The instance now separates its records—the career map and ledger—from its tunable settings, held in a single configuration file. The mechanism reads the configuration; the user owns and controls it.
+
+The result is a system with clear boundaries: reusable behavior in the mechanism, personal records in their designated files, and user-controlled settings in one place.
 
 ### Where it stands today
-The system is built around a few simple principles:
 
-- The mechanism defines how the product works; the config defines how it behaves for this person; the records define who the person is.
-- Every durable fact has one authoritative home.
-- File locations are resolved through the manifest, not hardcoded into the mechanism.
-- Shared rules live in the standards and apply to every hat.
-- Each hat follows a defined procedure with clear decision points, write boundaries, and output requirements.
-- Progress and continuity live in the logs and ledger, not in a catch-all session file.
-- Sessions are disposable; the files are the state. A clean agent session reaches full working context from `AGENTS.md` alone.
+The system is built on a small set of governing principles:
 
-These decisions are intended to keep the system consistent as it grows. New features should fit the existing structure rather than introduce another place for information to drift or another set of rules for the agent to interpret.
+- **Clear separation of responsibilities:** The mechanism defines how the product works, the config defines how it behaves for a specific person, and the records define who that person is.
+- **One authoritative home for every durable fact:** Information has a single source of truth rather than being duplicated across files.
+- **Manifest-driven file resolution:** File locations are resolved through the manifest. The paths shown in the hats are the default layout for reference; the user's manifest is authoritative.
+- **Shared standards across every hat:** Common rules live in the standards and apply consistently, regardless of which hat is active.
+- **Explicit procedures and boundaries:** Each hat follows a defined procedure with clear decision points, write boundaries, and output requirements.
+- **Purpose-built continuity:** Progress and continuity are maintained through logs and the ledger, not accumulated in a catch-all session file.
+- **Files as the source of state:** Sessions are disposable; the files are authoritative. A fresh agent session reconstructs its full working context starting from `AGENTS.md` (the manifest, the standards, the hat's log).
+
+Together, these principles are designed to keep the system coherent as it grows. New capabilities should extend the existing structure, not create competing sources of truth, blur established boundaries, or introduce additional rules for the agent to reconcile.
 
 ## Where state lives
 
@@ -175,19 +176,8 @@ The system keeps its working history, job-search progress, settings, and operati
 - `instance/ledger.tsv` — the job search and its progress.
 - `instance/config.md` — the user's tunables: floor, pace, follow-up cadence, claim duties.
 - `standards/STANDARDS.md` — the shared rules.
-- `instance/architect-findings.md` — findings from architecture reviews and audits.
 
 This separation allows the system to resume work without relying on a single session file. Each file has a defined purpose and serves as the reference for its own category of information.
-
-## The body (planned)
-
-The workflow currently runs manually. The long-term plan is to build a separate code project that automates it.
-
-This project, referred to as the body, will handle the execution: finding job listings, identifying worthwhile opportunities using `hats/sourcing.md`, recommending a suitable resume, submitting applications according to the defined approval rules, and updating the ledger and the QA record.
-
-The existing project serves as the brain. It contains the knowledge, standards, and procedures that guide those decisions. The body will use that knowledge to carry out the workflow and record its results.
-
-The goal is to keep decision-making knowledge separate from execution, so the automation can evolve without duplicating the rules it depends on.
 
 ## Setup
 
@@ -207,10 +197,36 @@ Humans start here; agents start at `AGENTS.md`.
 
 Running a model locally keeps inference inside your configured environment, but it does not make the whole workflow offline — plugins, external services, and other integrations may still reach remote systems depending on their configuration.
 
-## Testing
+## Testing and evaluation
 
-A passing test is evidence, not proof. A test written by the same agent that wrote the code reproduces its assumptions instead of catching its mistakes. Verification here goes past green: edge cases, failure handling, data integrity, a re-scan after every change. What isn't tested is labeled as such — never assumed.
+AI output is not self-verifying. A model can produce plausible reasoning, convincing tests, and code that passes every check while still being wrong. Tests written by the same model may reproduce the assumptions that led to the mistake.
 
-## A note on AI review
+Evaluate the reasoning, not just the result. Challenge assumptions. Look for counterexamples. Check edge cases, failure paths, and data integrity independently. Ask what evidence would change the conclusion, and distinguish what has been verified from what merely seems likely.
 
-A repo is a snapshot, not a person. An agent can predict what comes next in a file; it can't see why the file exists. The architecture, the decisions, the trade-offs are in here — in the docs. Judge what's actually present. Don't mistake the evidence you can see for the whole picture.
+Evaluate the interaction, too. A model can misunderstand the task, project intentions onto the user, or become attached to an interpretation that no longer fits the evidence. When its behavior feels off, don't automatically compensate by explaining yourself more carefully. Re-examine the assumptions and the mechanisms shaping the response.
+
+A passing test is evidence, not proof. A confident explanation is a hypothesis, not verification. Keep testing both the work and the reasoning that produced it.
+
+## The session boundary
+
+A session is a working context, not a source of truth. As it grows, old assumptions, abandoned approaches, and outdated references can persist long after the underlying reality has changed. The model may remember what was true without recognizing that it no longer is.
+
+The same drift can happen in its understanding of the user. A tentative inference becomes an assumed preference. An isolated reaction becomes a personality trait. A mistaken interpretation starts shaping every subsequent response. The model then reads new evidence through a projection of its own making.
+
+Know when to stop and start fresh. Begin a new session when the task changes substantially, the context becomes cluttered, the reasoning starts to loop, or the interaction repeatedly misses the mark. Before handing off, preserve verified facts, current state, unresolved questions, and explicit constraints. Keep inferences separate from things the user has actually said.
+
+A fresh session is an opportunity to re-establish the facts, not an excuse to discard useful history. Carry forward what is supported. Reconsider what is merely assumed.
+
+## The audit habit
+
+Drift accumulates in code, documentation, context, and the model's understanding of the user. A pointer to a file that has moved. A state marker that has aged. A decision copied into multiple documents until the versions disagree. An assumption about the user's intentions repeated until it passes for fact.
+
+This is data smear, and it compounds. Each new session can inherit the residue of the last, mistaking accumulated drift for ground truth.
+
+Audit on a rhythm, not just when something feels wrong. After a large batch of changes. When the task changes direction. Before handing work to another session. Whenever the code, the reasoning, or the interaction feels off.
+
+Check claims against the repository. Check interpretations against what the user actually said. When the model repeatedly misses the mark, examine the mechanism producing the behavior: the instructions, the context, the evaluation criteria, or the handoff process. Correct the mechanism instead of endlessly correcting its latest output.
+
+Don't turn a temporary inference into a permanent rule. Don't make the user adapt to a faulty model of them. When the evidence contradicts the model's understanding, update the understanding.
+
+The audit is cheap. A smeared brain is not.

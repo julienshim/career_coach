@@ -12,7 +12,7 @@
 **Context units to pull.**
 - `instance/interviews/_standard-screen-answers.md` — the shared answer bank.
 - `instance/interviews/_standard-interview-answers.md` — reusable answers + gap-bridges distilled from confirmed rejections. Start here so the prep inherits the last lesson.
-- `instance/interviews/<company>/` — existing prep for this company (live threads). Closed threads live in `instance/interviews/_archive/<company>/` — pull from there if a closed company re-engages.
+- `instance/interviews/<company>/` — existing prep for this company (live threads only; closed threads are deleted after distillation). If a closed company re-engages, the standard bank plus the ledger rows are the material.
 - `instance/profile.md` — the evidence values, the framing, the NDA list.
 - `instance/career-map/evidence/` — the EVIDs behind the answers.
 - `instance/career-map/resume_components/story_bank.md` — the stable stories (most complex system, why you, etc.).
@@ -21,8 +21,8 @@
 **The process.**
 1. User says a company has an interview (round plus date) → the agent pulls the company's submitted QA, the standard screen answers, and the existing company file, and outputs the prep in one pass.
 2. User reviews; the agent revises in chat.
-3. After the round the user reports the outcome → the agent logs it (the ledger row, the thread hub) and, on a confirmed rejection, runs the distillation.
+3. After the round the user reports the outcome → the agent logs it (the ledger row, the thread hub README at `instance/interviews/<company>/README.md`) and, on a confirmed rejection, runs the distillation.
 
-**Output contract.** Prep files in `instance/interviews/<company>/`: the screen prep, the round preps, an index card, and the research. Written in the user's voice, grounded in evidence, NDA-clean. When a thread closes — confirmed rejection, role paused, or closed as cold by user decision — distill the reusable NDA-clean learnings into `instance/interviews/_standard-interview-answers.md`, then move the company directory to `instance/interviews/_archive/`. A rejection at the screen counts: the screen is a real round.
+**Output contract.** Prep files in `instance/interviews/<company>/`: the thread hub README (`instance/interviews/<company>/README.md` — the live state, dated), the screen prep, the round preps, an index card, and the research. Written in the user's voice, grounded in evidence, NDA-clean. When a thread closes — confirmed rejection, role paused, or closed as cold by user decision — distill the reusable NDA-clean learnings into `instance/interviews/_standard-interview-answers.md` (recording the JD each answer was tailored to), then delete the company directory: the ledger holds the record. A rejection at the screen counts: the screen is a real round.
 
 **Log.** Append one dated row to `instance/logs/interview.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.

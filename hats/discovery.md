@@ -11,7 +11,7 @@
 **Context units to build (not just read).**
 - `standards/STANDARDS.md` — the context-unit schemas (the shapes to fill: EVID, profile, voice, strategy, company, story).
 - `MANIFEST.schema.md` — the concepts the new user's manifest must define.
-- `instance/career-map/README.md` — the template structure to fill.
+- The career-map layout to build — the directory tree and per-unit purpose in the reference `instance/career-map/README.md` § Structure, and the unit shapes in `standards/STANDARDS.md` § The context-unit schemas. Build the new user's map to those; never copy the reference's content.
 - The new user's raw material (their code dir, their history, their words).
 
 **The process.**

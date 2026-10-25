@@ -1,6 +1,6 @@
 # Hats
 
-A hat is a role the agent wears for one kind of task. The entry point (`AGENTS.md`) picks the hat. A hat is user-agnostic. It names the job, the lens it thinks with, and the context units it pulls. It never hard-codes a person's facts. The facts live in the context units (the career-map hub, the evidence, the instance profile, the company data). The hat assembles them.
+A hat is a role the agent wears for one kind of task. The entry point (`AGENTS.md`) picks the hat. A hat is user-agnostic. It names the job, the lens it thinks with, and the context units it pulls. It never hard-codes a person's facts. The facts live in the context units (the career-map units, the evidence, the instance profile, the company data). The hat assembles them.
 
 ## The hats
 

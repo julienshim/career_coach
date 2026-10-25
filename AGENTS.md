@@ -1,6 +1,9 @@
 # AGENTS.md — career_coach
 
-This directory is the **career brain**: the durable source of truth for the job search and the professional identity behind it. It is NOT the code project. The body (the sibling code project that scrapes, tracks, and will run the loop) is separate. See `README.md`.
+`career_coach` is the **career brain**: the durable source of truth for the job search and the professional identity behind it. It holds documents, rules, and one person's career data — not executable software. Concretely:
+- No code in this repo runs the job search. The loop runs in agent sessions, by the hats. Do not look for it here.
+- Do not write new code into this repo. The user's own code (their tools, their work projects) lives in the user's own projects, outside this directory, referenced by path only.
+- `instance/evidence-code/` is the user's work snapshots, not a project to work on. Agent-off-limits: no read, write, or glob — the standing rule is in `standards/STANDARDS.md`.
 
 ## The entry point
 Pick the hat for the task, then read the hat. The hat names the context units to pull and the output to produce. Do not read the whole directory. Do not start by reading everything.
@@ -32,7 +35,7 @@ Pick the hat for the task, then read the hat. The hat names the context units to
 - NDA-clean. No internal codenames external.
 - No overclaim. Gaps live in the Q&A, never the resume.
 - Gatekeeper, realism over flattery.
-- The full rules and the answer voice are in `standards/STANDARDS.md`. The person-specific facts (test counts, NDA list, banned tools) are in `instance/profile.md`; the tunables (floor, pace, follow-up cadence) are in `instance/config.md`.
+- The full rules and the answer voice are in `standards/STANDARDS.md`. The person-specific facts (test counts, NDA list, banned claims) are in `instance/profile.md`; the tunables (floor, pace, follow-up cadence) are in `instance/config.md`.
 
 ## The loop (how a job gets handled)
 The Sourcing hat runs it. See `hats/sourcing.md`.
