@@ -9,7 +9,7 @@
 - **One door.** Every task begins by picking a hat. If an agent can start by reading anything, the entry point has failed.
 
 **Context units to pull.**
-- The directory structure (glob the tree).
+- The directory structure (walk the tree, pruning `instance/evidence-code/` — the safe-walk rule in `standards/STANDARDS.md`).
 - `standards/STANDARDS.md` (the rules of the system).
 - Any file the audit targets. Read it fully.
 - The file that should own the truth (to confirm the single source).

@@ -21,7 +21,7 @@ Pick the hat for the task, then read the hat. The hat names the context units to
 - `instance/MANIFEST.md` — the registry. Resolves the concepts the hats name to the real paths.
 - `standards/STANDARDS.md` — the shared rules (the scantron, the operating rules, the answer voice, the context-unit schemas).
 - Pick the hat for the task, then read the last row of `instance/logs/<hat>.tsv` — its Next field is where this hat left off. A cold session starts there: the conversation is disposable, the files are the state.
-- The hat then pulls its context units — deliberate, not a dump — and appends one row to the log when the run ends. The application record (every company's stage, outcome, fit, comp, gaps) lives in `instance/ledger.tsv`.
+- The hat then pulls its context units — deliberate, not a dump — and appends one row to the log when the run ends. The application record (every company's stage, outcome, and the link) lives in `instance/ledger.tsv` — third-party-safe, a factual event only; the per-application deliberation (fit, comp read, gaps, resume call) lives in the run's log row, not the ledger.
 
 ## The layering
 - **`hats/`** — the mechanism. User-agnostic. The product.

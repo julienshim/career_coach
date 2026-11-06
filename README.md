@@ -48,9 +48,9 @@ career_coach/
 └── instance/              # one person's data — private, gitignored
     ├── MANIFEST.md        # the registry — concepts → paths
     ├── profile.md         # who the user is (facts)
-     ├── config.md          # the user's tunables (settings)
-     ├── market-intel.md    # distilled external signals (dated, tagged)
-     ├── career-map/        # the brain — identity, evidence, strategy
+    ├── config.md          # the user's tunables (settings)
+    ├── market-intel.md    # distilled external signals (dated, tagged)
+    ├── career-map/        # the brain — identity, evidence, strategy
     ├── evidence-code/     # the receipts — agent-off-limits (standards)
     ├── resume/            # resumes + submitted Q&A
     ├── interviews/        # per-company game plans

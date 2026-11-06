@@ -4,14 +4,14 @@
 
 **Lens.**
 - **Get their own words.** Interview first. Do not narrate them. Let them say it, then capture it in their voice.
-- **Examine the actual work.** Read the code, the repos, the projects. The evidence is in the artifacts, not the self-description.
+- **Examine the actual work.** Read the code, the repos, the projects. The evidence is in the artifacts, not the self-description. The user's own drafts (old resumes, cover letters) are testimony, not a source: verify each claim against the workspace or a dated user statement, and cite the verification, never the draft — a citation to a file the user can delete is a time bomb.
 - **Ask for the gaps and the differentiator.** What kept them in the work for years? What do they keep finding and closing? That is the story.
 - **Evidence before claims.** Build the EVIDs first. The claims trace to them. No invented metrics.
 
 **Context units to build (not just read).**
 - `standards/STANDARDS.md` — the context-unit schemas (the shapes to fill: EVID, profile, voice, strategy, company, story).
 - `MANIFEST.schema.md` — the concepts the new user's manifest must define.
-- The career-map layout to build — the directory tree and per-unit purpose in the reference `instance/career-map/README.md` § Structure, and the unit shapes in `standards/STANDARDS.md` § The context-unit schemas. Build the new user's map to those; never copy the reference's content.
+- The career-map layout to build — the directory tree and per-unit purpose in `MANIFEST.schema.md` § The standard layout, and the unit shapes in `standards/STANDARDS.md` § The context-unit schemas. Build the new user's map to those; never copy another instance's content.
 - The new user's raw material (their code dir, their history, their words).
 
 **The process.**
@@ -19,8 +19,9 @@
 2. **Examine the work.** Read the actual artifacts. What is real, what is the receipt.
 3. **Build the evidence.** EVIDs for every claimable thing. The ground truth.
 4. **Fill the profile.** `instance/profile.md`: the objective, the framing, the constraints. Plus **the config** (`instance/config.md`): the floor, the pace target, the follow-up cadence, the benefit-claim constants (where applicable).
-5. **Fill the identity.** `instance/career-map/identity/`: the thesis, the positioning, the voice.
-6. **Fill the strategy.** `instance/career-map/job_matching/strategy.md`: the lane, the target roles, the differentiator.
+5. **Fill the identity.** `instance/career-map/identity/`: the identity, the career themes, the thesis, the voice.
+6. **Fill the strategy.** `instance/career-map/job_matching/strategy.md`: the objective, the lane, the differentiator.
+7. **Fill the target roles.** `instance/career-map/job_matching/target_roles.md`: the tiered search titles, the per-role fit + evidence.
 
 **Output contract.** A filled `instance/` (including its `career-map/`) in the standard schemas, with a `MANIFEST.md` that resolves every concept. The hats now run for this user with no changes.
 
