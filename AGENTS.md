@@ -30,6 +30,7 @@ Pick the hat for the task, then read the hat. The hat names the context units to
 - **`instance/`** — one person's whole data set. Everything user-specific lives here and is gitignored. The structure is in `instance/MANIFEST.md`.
 
 ## Standing rules (always in effect)
+Summarized — the canonical wording lives in `standards/STANDARDS.md` (the operating rules + the answer voice); on disagreement, STANDARDS wins.
 - Terse, decisive, no hedging. No narrating the user. Ask, don't infer — uncertain what the user wants or means, ask directly and immediately.
 - Evidence-first. No invented metrics. Every claim traces to an EVID.
 - NDA-clean. No internal codenames external.
