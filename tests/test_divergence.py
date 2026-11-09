@@ -72,6 +72,16 @@ class TestDivergence(unittest.TestCase):
         self.assertEqual(len(d), 1)
         self.assertIn("Acme", d[0])
 
+    def test_drifted_names_match_bidirectionally(self):
+        # the store keys carry suffixes the narrative names lack
+        # ("Acme Inc." vs "Acme", "Initech Labs" vs "Initech"): naming drift
+        # is not drift. Only the key sharing no name at all is reported.
+        db = pathlib.Path(self.tmp.name) / "drift.db"
+        store.migrate(db, helpers.FIXTURES / "ledger_drift_fixture.tsv")
+        d = store.divergence(db, STATE / "qa_drift_fixture.md",
+                             STATE / "cast_drift_fixture.md")
+        self.assertEqual(d, ["qa: no '## ' section naming 'Globex Corp'"])
+
     def test_missing_cast_file_is_drift(self):
         missing = pathlib.Path(self.tmp.name) / "nope.md"
         d = store.divergence(self.db, self.qa, missing, hubs_dir=self.hubs)

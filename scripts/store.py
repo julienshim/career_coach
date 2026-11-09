@@ -485,19 +485,37 @@ def _read_text(path):
     return p.read_text(encoding="utf-8")
 
 
+def _company_part(name_line):
+    """The company part of a QA section or cast line: the text before the
+    first ' — ' separator; a line without the separator is its own part.
+    Markdown emphasis is stripped (narrative files may bold the name)."""
+    return name_line.split(" — ")[0].replace("*", "").strip()
+
+
+def _names_match(key, name):
+    """Bidirectional, case-insensitive: the key names the narrative company
+    or the narrative name names the key. Naming drift (suffixes, wrappers)
+    is not drift; a company sharing no name at all is."""
+    k, n = key.lower(), name.lower()
+    return bool(n) and (k in n or n in k)
+
+
 def divergence(db_path, qa_path, cast_path, hubs_dir=None):
     """Check the markdown state files against thread state. Returns drift
     descriptions (empty = clean); the CLI exits non-zero on drift.
 
     v1 checks:
       1. QA presence — every company with >=1 Application Submitted event has
-         a '## ' section naming it in the QA file (case-insensitive).
+         a '## ' section naming it in the QA file.
       2. Hub recency — for each advanced thread whose company has
          <hubs>/<company>/README.md, the hub's '**Live state (M/D/YYYY)**'
          date >= the thread's status date. A missing hub is not drift (a
          round may not be live yet); a stale or malformed hub is.
       3. Cast naming — every advanced/rejected/closed thread's company is
-         named (case-insensitive) in the cast file.
+         named in the cast file.
+     A naming match is bidirectional and case-insensitive: a section or
+     line's company part names a store key when either contains the other
+     — naming drift is not drift, a company sharing no name at all is.
     """
     conn = db_connect(db_path)
     try:
@@ -518,19 +536,22 @@ def divergence(db_path, qa_path, cast_path, hubs_dir=None):
 
     # 1. QA presence
     qa_text = _read_text(qa_path)
-    sections = [ln for ln in qa_text.split("\n") if ln.startswith("## ")]
+    sections = [_company_part(ln[3:]) for ln in qa_text.split("\n")
+                if ln.startswith("## ")]
     for comp in sorted(applied):
-        if not any(comp.lower() in s.lower() for s in sections):
+        if not any(_names_match(comp, s) for s in sections):
             drift.append("qa: no '## ' section naming %r" % (comp,))
 
     # 3. Cast naming (per company: one naming covers all of its threads)
-    cast_text = _read_text(cast_path).lower()
+    cast_names = [_company_part(ln[2:])
+                  for ln in _read_text(cast_path).split("\n")
+                  if ln.startswith("- ")]
     cast_targets = sorted({
         company for company, _role, st, _sd, _sd_iso in threads
         if st in ("advanced", "rejected", "closed")
     })
     for company in cast_targets:
-        if company.lower() not in cast_text:
+        if not any(_names_match(company, n) for n in cast_names):
             drift.append("cast: %r not named" % (company,))
 
     # 2. Hub recency

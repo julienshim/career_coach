@@ -2,6 +2,10 @@
 
 Date + version (YYYY.MM.DD.N), newest first. One entry per commit that touches the mechanism, written at commit time, covering every mechanism change since the previous commit. N = that day's commit number. One line per change: what changed and why. Mechanism only — hats, standards, AGENTS, README, the registry contract. Instance changes are recorded in the hat logs and the ledger, not here. The entry is user-agnostic: the "why" names the class of failure a rule prevents, never an instance fact or inference (no dates beyond the entry's own version, no counts, no incident narrative). Uncommitted work lives in `git diff` and the hat logs; this file records what is in the commits. The design narrative — how and why the structure became what it is — lives in the README's How the System Evolved.
 
+## 2026.11.08.3
+
+- **Divergence (calibration):** the drift check's name matching is now bidirectional and scoped to the company part — a narrative file names a stored company when either contains the other, case-insensitive, on the line's company part (the text before the role separator), not the whole line. Naming drift (a company key's suffix or wrapper missing from the narrative, or vice versa) no longer reports as drift; a company sharing no name at all still does, and genuine gaps (an application with no Q&A section, a closed thread missing from the cast) keep reporting. The company-part scope also removes a false "named" where the name only appeared inside another company's role text or an ordinary word. Prevents the class of failure where the detector drowns in naming noise and the genuine gaps stop being findable.
+
 ## 2026.11.08.2
 
 - **CI:** the test matrix drops the oldest supported python — the latest runner image no longer ships it in its version manifest, so the job failed at interpreter installation, before the suite ran, and read as a code failure. The matrix now covers the installable versions; the floor is verified in the development environment, where the suite runs every session. Prevents the class of failure where a broken interpreter install masks (or fakes) a code failure.
