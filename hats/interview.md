@@ -21,8 +21,8 @@
 **The process.**
 1. User says a company has an interview (round plus date) → the agent pulls the company's submitted QA, the standard screen answers, and the existing company file, and outputs the prep in one pass.
 2. User reviews; the agent revises in chat.
-3. After the round the user reports the outcome → the agent logs it (the ledger row, the thread hub README at `instance/interviews/<company>/README.md`) and, on a confirmed rejection, runs the distillation.
+3. After the round the user reports the outcome → the agent logs it (the store's `log-event` — the thread state flip rides the op — plus the thread hub README at `instance/interviews/<company>/README.md`) and, on a confirmed rejection, runs the distillation.
 
 **Output contract.** Prep files in `instance/interviews/<company>/`: the thread hub README (`instance/interviews/<company>/README.md` — the live state, dated), the screen prep, the round preps, an index card, and the research. Written in the user's voice, grounded in evidence, NDA-clean. When a thread closes — confirmed rejection, role paused, or closed as cold by user decision — distill the reusable NDA-clean learnings into `instance/interviews/_standard-interview-answers.md` (recording the JD each answer was tailored to), then delete the company directory: the ledger holds the record. The end state is the tear-down — no permanent archive; the learning lives in the standard banks (improved with every distillation). A rejection at the screen counts: the screen is a real round.
 
-**Log.** Append one dated row to `instance/logs/interview.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/interview.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat interview` is the "left off" for this hat.

@@ -36,7 +36,7 @@ Local tools only (git, shell, local scripts); repository contents never leave th
 2. **The fix.** For each: where the truth should live, what the mis-scoped file becomes.
 3. **Ranked.** Most-biasing first.
 
-**Log.** Append one dated row to `instance/logs/architect.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/architect.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat architect` is the "left off" for this hat.
 
 **Must not do.** Do not evaluate a JD. Do not write an application answer. Do not edit career content. You are the meta hat. You name; after user approval, you execute the fix batch and re-scan.
 

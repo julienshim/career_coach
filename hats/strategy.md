@@ -23,4 +23,4 @@
 
 **Output contract.** Lane reads, placement calls, and the honest "your instinct is off" moments. When the strategy changes, write it back to `instance/career-map/job_matching/strategy.md` (the single source).
 
-**Log.** Append one dated row to `instance/logs/strategy.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/strategy.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat strategy` is the "left off" for this hat.

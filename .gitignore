@@ -1,7 +1,21 @@
 # career_coach is one tree, two layers.
 # Tracked (the product, shareable, zero personal data): AGENTS.md, README.md,
-#   CHANGELOG.md, MANIFEST.schema.md, hats/, standards/.
+#   CHANGELOG.md, MANIFEST.schema.md, hats/, standards/, scripts/, tests/,
+#   .github/ (the CI workflow).
 # Gitignored (the instance, per-user, private): everything the user owns,
-#   all of it under instance/.
+#   all of it under instance/ — including the store db (instance/db/) and its
+#   WAL sidecars, and the generated exports (ledger.tsv, logs/).
 /instance/
+
+# sqlite artifacts, wherever a db is created (defense in depth; the store db
+# lives under instance/ above)
+*.db
+*.db-shm
+*.db-wal
+
+# In-progress working artifacts at the root: drafts of mechanism docs that
+# carry instance data while they are being written. Never tracked.
+store-design.md
+store-plan.md
+
 .DS_Store

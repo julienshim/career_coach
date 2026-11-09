@@ -25,6 +25,6 @@
 
 **Output contract.** A filled `instance/` (including its `career-map/`) in the standard schemas, with a `MANIFEST.md` that resolves every concept. The hats now run for this user with no changes.
 
-**Log.** Append one dated row to `instance/logs/discovery.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/discovery.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat discovery` is the "left off" for this hat.
 
 **Must not do.** Do not invent a metric to make the profile look better. Do not fill a schema field the user has not given. Leave it open in `instance/career-map/review/unknowns.md`.

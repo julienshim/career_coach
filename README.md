@@ -1,5 +1,7 @@
 # Career Coach
 
+[![CI](https://github.com/julienshim/career_coach/actions/workflows/ci.yml/badge.svg)](https://github.com/julienshim/career_coach/actions/workflows/ci.yml)
+
 A career coach built around the person, not just the job search.
 
 Career Coach turns a person’s work history, code, and own words into a persistent career profile. It uses that context to manage the job search: identifying relevant roles, preparing applications, supporting interview prep, and tracking progress.
@@ -29,7 +31,7 @@ This project is dedicated to the people behind the machine, and to the idea that
 - Muldoon, J., Cant, C., Wu, B., Graham, M. (2024). [A Typology of AI Data Work](https://journals.sagepub.com/doi/10.1177/20539517241232632). *Big Data & Society* 11(1). Open access: [repository copy](https://repository.essex.ac.uk/37647/).
 
 ## The two layers
-- **The mechanism** (this root, tracked, user-agnostic, the product): `AGENTS.md` (the one door), `hats/` (the six hats, each a strict SOP), `standards/` (the shared rules), `MANIFEST.schema.md` (the registry contract), `CHANGELOG.md` (the dated change record), this README.
+- **The mechanism** (this root, tracked, user-agnostic, the product): `AGENTS.md` (the one door), `hats/` (the six hats, each a strict SOP), `standards/` (the shared rules), `MANIFEST.schema.md` (the registry contract), `scripts/` + `tests/` (the store ops — the data layer's tooling — with the test suite), `CHANGELOG.md` (the dated change record), this README.
 - **The instance** (`instance/`, per-user, private, gitignored): one person's whole data set — the records of who they are and what we know, plus the settings that tune the mechanism.
 
 A new user is a new `instance/` (with its own `career-map/`) built by the Discovery hat. The hats never change per person. The mechanism is the product; the instance is the data.
@@ -41,35 +43,39 @@ career_coach/
 ├── CHANGELOG.md           # the dated change record
 ├── MANIFEST.schema.md     # the registry contract — the concepts
 ├── standards/
-│   └── STANDARDS.md       # shared rules — scantron, operating rules, voice, schemas
+│   └── STANDARDS.md       # shared rules — scantron, operating rules, voice, schemas, the store
 ├── hats/
 │   ├── README.md          # the hat spec
 │   └── <hat>.md           # six hats, each a strict SOP
+├── scripts/
+│   └── store.py           # the store ops — the data layer's tooling, the only writer
+├── tests/                 # the store's test suite — synthetic fixtures, user-agnostic
 └── instance/              # one person's data — private, gitignored
     ├── MANIFEST.md        # the registry — concepts → paths
     ├── profile.md         # who the user is (facts)
     ├── config.md          # the user's tunables (settings)
     ├── market-intel.md    # distilled external signals (dated, tagged)
+    ├── db/                # the store — the data layer's system of record
     ├── career-map/        # the brain — identity, evidence, strategy
     ├── evidence-code/     # the receipts — agent-off-limits (standards)
     ├── resume/            # resumes + submitted Q&A
     ├── interviews/        # per-company game plans
     ├── social-media/      # surface specs
-    ├── ledger.tsv         # the search record
-    └── logs/              # per-hat session logs
+    ├── ledger.tsv         # the search record — the store's generated export
+    └── logs/              # per-hat session logs — the store's generated export
 ```
 
 ## How it works
 
 I wanted a single place to start, so AGENTS.md became the entry point. It selects the hat for the task. Each hat knows which context units it needs and what it must produce. It loads only what the work calls for, never the entire directory.
 
-Shared rules live in standards/STANDARDS.md: the scantron, operating rules, answer voice, and context-unit schemas. These belong to the mechanism, not to any particular user or instance.
+Shared rules live in standards/STANDARDS.md: the scantron, operating rules, answer voice, context-unit schemas, and the store — the data layer's system of record (the ops contract is in § The store). These belong to the mechanism, not to any particular user or instance.
 
 The mechanism defines concepts; each instance provides a MANIFEST.md that maps those concepts to actual files. This keeps the mechanism independent of any instance's layout. It knows what to look for, not where a particular instance keeps it.
 
 In the reference setup the work happens in an OpenCode session. The directory holds the pieces, AGENTS.md starts the process, and the selected hat loads what it needs. Context is deliberate: the AI doesn't read everything simply because it's available.
 
-**Sessions are disposable.** A clean session—a fresh agent with an empty conversation—can reconstruct its full working context from files alone. AGENTS.md provides the entry point; the manifest and standards establish the environment; the hat's SOP defines the procedure; and the hat's log records where work left off. The conversation is a workspace, not a record. Anything that matters is persisted at a run boundary, so a compacted or terminated session loses nothing that the files don't already hold. The next session simply resumes from the last recorded boundary.
+**Sessions are disposable.** A clean session—a fresh agent with an empty conversation—can reconstruct its full working context from files alone. AGENTS.md provides the entry point; the manifest and standards establish the environment; the hat's SOP defines the procedure; and the hat's last log row in the store records where work left off. The conversation is a workspace, not a record. Anything that matters is persisted at a run boundary, so a compacted or terminated session loses nothing that the files don't already hold. The next session simply resumes from the last recorded boundary.
 
 **When to close a session and start fresh:** the signs of drift and the handoff duties are in `The session boundary` below. The short version: close at a clean finish or at the first signs of drift — the state lives in the files, not the conversation.
 
@@ -89,7 +95,7 @@ What to say, and which hat picks it up:
 
 - "Here is a JD" (or a batch) → **Sourcing** — apply/skip, the resume call, the Q&A, the logging.
 - "I have an interview at X" → **Interview** — the game plan, in your voice.
-- "X answered — here is the outcome" → the outcome is logged (the ledger row, the thread hub README): an application-stage event by **Sourcing**; a round outcome by **Interview**, which on a confirmed rejection also runs the distillation.
+- "X answered — here is the outcome" → the outcome is logged through the store (`log-event` — the thread state flip rides the op — plus the thread hub README): an application-stage event by **Sourcing**; a round outcome by **Interview**, which on a confirmed rejection also runs the distillation.
 - "Update my LinkedIn / GitHub / portfolio" → **Presence** — one voice, three registers.
 - "Where is the search going? Should I keep pushing X?" → **Strategy** — the lane read, the placement call.
 - "Something in the brain feels off" → **Architect** — the audit.
@@ -154,6 +160,14 @@ The instance now separates its records—the career map and ledger—from its tu
 
 The result is a system with clear boundaries: reusable behavior in the mechanism, personal records in their designated files, and user-controlled settings in one place.
 
+### 8. Giving the data layer a system of record
+
+The records of the search itself — every dated event, every thread's status, each hat's log — were hand-edited text tables. Text is easy to write and easy to corrupt: a field can be mis-structured, a personal detail can slip into a note that gets shared, an event can be logged without the state flip that follows from it, and drift between a record and the state it should imply is found only when someone audits the whole history.
+
+The fix was to give the data layer a system of record: a small database reached only through named operations. Events are append-only — there is no edit path, so a written row is never rewritten and a correction is a new dated event. Thread state is derived from events, never set by hand. The operations refuse personal patterns at write time, and the old text tables became generated exports — regenerated from the database, never hand-edited, so the file on disk is never stale. A stored drift check compares the narrative state files against the thread states, so the state-versus-record class of drift is a command, not an audit.
+
+The narrative layer — the identity, the evidence, the strategy, the interview hubs — stays in files. The store owns state; the files keep the thinking.
+
 ### Where it stands today
 
 The system is built on a small set of governing principles:
@@ -163,21 +177,24 @@ The system is built on a small set of governing principles:
 - **Manifest-driven file resolution:** File locations are resolved through the manifest. The paths shown in the hats are the default layout for reference; the user's manifest is authoritative.
 - **Shared standards across every hat:** Common rules live in the standards and apply consistently, regardless of which hat is active.
 - **Explicit procedures and boundaries:** Each hat follows a defined procedure with clear decision points, write boundaries, and output requirements.
-- **Purpose-built continuity:** Progress and continuity are maintained through logs and the ledger, not accumulated in a catch-all session file.
+- **Purpose-built continuity:** Progress and continuity are maintained through the store — the dated events, the derived thread states, the per-hat log rows — not accumulated in a catch-all session file. The text tables are its generated exports.
 - **Files as the source of state:** Sessions are disposable; the files are authoritative. A fresh agent session reconstructs its full working context starting from `AGENTS.md` (the manifest, the standards, the hat's log).
 
 Together, these principles are designed to keep the system coherent as it grows. New capabilities should extend the existing structure, not create competing sources of truth, blur established boundaries, or introduce additional rules for the agent to reconcile.
 
 ## Where state lives
 
-The system keeps its working history, job-search progress, settings, and operating rules in separate files.
+The data layer's system of record is the store: one database holding the dated events, the thread states (derived from the events, never hand-set), and the per-hat log rows. The named operations in `standards/STANDARDS.md` § The store are the only writer; everything else reads.
 
-- `instance/logs/<hat>.tsv` — each hat's work and handoff notes.
-- `instance/ledger.tsv` — the job search and its progress.
+- the store (the `store` concept, resolved by the manifest; by default `instance/db/`) — the system of record.
+- `instance/ledger.tsv` — the search record. A generated export of the store's events: regenerated at the end of any run that wrote events, never hand-edited.
+- `instance/logs/<hat>.tsv` — each hat's work and handoff notes. A generated export of the store's log rows.
 - `instance/config.md` — the user's tunables: floor, pace, follow-up cadence, claim duties.
 - `standards/STANDARDS.md` — the shared rules.
 
-This separation allows the system to resume work without relying on a single session file. Each file has a defined purpose and serves as the reference for its own category of information.
+The narrative state — what is pending at a live thread, what happened in the room — stays in the dated hub files: the store holds the factual, dated record, and the hub's live state is checked against it (the `divergence` op).
+
+This separation allows the system to resume work without relying on a single session file. Each surface has a defined purpose and serves as the reference for its own category of information.
 
 ## Setup
 
@@ -187,6 +204,7 @@ Requirements:
 - `llama.cpp` serving a compatible local model
 - OpenCode configured to connect to it
 - Superpowers installed and available
+- `python3` (stdlib only) — the store ops and the test suite
 
 ```
 cd /path/to/project
@@ -206,6 +224,8 @@ Evaluate the reasoning, not just the result. Challenge assumptions. Look for cou
 Evaluate the interaction, too. A model can misunderstand the task, project intentions onto the user, or become attached to an interpretation that no longer fits the evidence. When its behavior feels off, don't automatically compensate by explaining yourself more carefully. Re-examine the assumptions and the mechanisms shaping the response.
 
 A passing test is evidence, not proof. A confident explanation is a hypothesis, not verification. Keep testing both the work and the reasoning that produced it.
+
+The mechanism's own tooling carries a machine-checked core: the store's test suite (`tests/`, synthetic fixtures only) runs with `python3 -m unittest discover tests` and in CI (`.github/workflows/ci.yml`). The discipline above applies to everything the AI produces that the suite cannot see.
 
 ## The session boundary
 

@@ -21,4 +21,4 @@
 
 **Output contract.** Surface copy in the voice, NDA-clean, evidence-true. The agent writes the spec copy. The user pastes it live. The agent does not deploy.
 
-**Log.** Append one dated row to `instance/logs/presence.tsv` (Date, Task, Action, Decision, Next). That row is the next session's pickup — the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/presence.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat presence` is the "left off" for this hat.

@@ -1,8 +1,8 @@
 # AGENTS.md — career_coach
 
-`career_coach` is the **career brain**: the durable source of truth for the job search and the professional identity behind it. It holds documents, rules, and one person's career data — not executable software. Concretely:
+`career_coach` is the **career brain**: the durable source of truth for the job search and the professional identity behind it. It holds documents, rules, and one person's career data, plus the mechanism's own data-layer tooling. Concretely:
 - No code in this repo runs the job search. The loop runs in agent sessions, by the hats. Do not look for it here.
-- Do not write new code into this repo. The user's own code (their tools, their work projects) lives in the user's own projects, outside this directory, referenced by path only.
+- The only code in this repo is the mechanism's own tooling — `scripts/` and `tests/`, user-agnostic like the hats (the store ops; the contract is `standards/STANDARDS.md` § The store). The user's own code (their tools, their work projects) lives in the user's own projects, outside this directory, referenced by path only. User data lives in `instance/`.
 - `instance/evidence-code/` is the user's work snapshots, not a project to work on. Agent-off-limits: no read, write, or glob — the standing rule is in `standards/STANDARDS.md`.
 
 ## The entry point
@@ -19,13 +19,14 @@ Pick the hat for the task, then read the hat. The hat names the context units to
 
 ## Read first, every session
 - `instance/MANIFEST.md` — the registry. Resolves the concepts the hats name to the real paths.
-- `standards/STANDARDS.md` — the shared rules (the scantron, the operating rules, the answer voice, the context-unit schemas).
-- Pick the hat for the task, then read the last row of `instance/logs/<hat>.tsv` — its Next field is where this hat left off. A cold session starts there: the conversation is disposable, the files are the state.
-- The hat then pulls its context units — deliberate, not a dump — and appends one row to the log when the run ends. The application record (every company's stage, outcome, and the link) lives in `instance/ledger.tsv` — third-party-safe, a factual event only; the per-application deliberation (fit, comp read, gaps, resume call) lives in the run's log row, not the ledger.
+- `standards/STANDARDS.md` — the shared rules (the scantron, the operating rules, the answer voice, the context-unit schemas, the store).
+- Pick the hat for the task, then `python3 scripts/store.py pickup --db <store> --hat <hat>` (the `store` concept, resolved by `instance/MANIFEST.md`) — the hat's last log row; its Next field is where this hat left off. A cold session starts there: the conversation is disposable, the files are the state.
+- The hat then pulls its context units — deliberate, not a dump — and logs the run through the store ops when it ends (`log-event` per event, `log-run` for the hat row; `ledger.tsv` and the log TSVs are generated exports — regenerated at the end of any run that wrote events, never hand-edited). The application record (every company's stage, outcome, and the link) lives in the store's events — third-party-safe, a factual event only; the per-application deliberation (fit, comp read, gaps, resume call) lives in the run's log row, not the ledger.
 
 ## The layering
 - **`hats/`** — the mechanism. User-agnostic. The product.
 - **`standards/`** — the shared rules. User-agnostic.
+- **`scripts/` + `tests/`** — the mechanism's own tooling (the store ops). User-agnostic. The product.
 - **`MANIFEST.schema.md`** — the registry contract. The mechanism names concepts; the per-user manifest resolves them.
 - **`instance/`** — one person's whole data set. Everything user-specific lives here and is gitignored. The structure is in `instance/MANIFEST.md`.
 

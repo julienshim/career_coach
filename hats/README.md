@@ -24,6 +24,7 @@ A hat is a role the agent wears for one kind of task. The entry point (`AGENTS.m
 ## The layering
 - **`hats/`** = the mechanism. User-agnostic. The product.
 - **`standards/`** = the shared rules. User-agnostic.
+- **`scripts/` + `tests/`** = the mechanism's own tooling (the store ops, with the test suite). User-agnostic.
 - **`MANIFEST.schema.md`** = the registry contract. The mechanism names concepts; the per-user manifest resolves them.
 - **`instance/`** = one person's whole data set. Everything user-specific lives here and is gitignored.
 

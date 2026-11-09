@@ -24,17 +24,18 @@ Every durable fact has one canonical home. If it is in two places it drifts.
 | Pace target + rate formula | `config.md` | `strategy.md` |
 | Follow-up cadence + posture | `config.md` | `—` |
 | Benefit-claim constants + logging duty (where applicable) | `config.md` | `—` |
-| Per-job posted compensation | `instance/ledger.tsv` + `interviews/<co>/` | `career-map/`, `strategy.md` |
-| Each dated company event (applied, round, outcome) | `ledger.tsv` | `career-map/` (the strategy cast's dated re-flags are permitted: pointer, not competing detail) |
-| A thread's live/pending state | `interviews/<co>/README.md` + the owning hat's log row | `ledger.tsv` (derived at read time — the ledger holds dated events only) |
+| Per-job posted compensation | the store (the event's note) + `interviews/<co>/` | `career-map/`, `strategy.md` |
+| Each dated company event (applied, round, outcome) | the store (`events`; `instance/ledger.tsv` is its generated export) | `career-map/` (the strategy cast's dated re-flags are permitted: pointer, not competing detail) |
+| A thread's status (submitted / advanced / rejected / closed / paused) | the store (`threads` — derived from events, never hand-set) | markdown (it carries the dated narrative live state, not the status) |
+| A thread's narrative live state (what is pending, what happened in the room) | `interviews/<co>/README.md` (dated) + the owning hat's log row | the store (events are factual, dated) |
 | The voice (spine, origin, registers) | `career-map/identity/voice.md` | surfaces (re-express, don't redefine) |
 | The strategy (lane, placement, top priority) | `career-map/job_matching/strategy.md` | `profile.md` (no duplicate ownership) |
 | Target roles + fit tiers | `career-map/job_matching/target_roles.md` | a second positioning doc |
 | NDA list | `profile.md` | — |
 | Working style + answer voice | `standards/STANDARDS.md` | `—` |
 | File locations (concept → path) | `instance/MANIFEST.md` | `—` |
-| Application limits | `career-map/job_matching/companies.md` + `ledger.tsv` | `—` |
-| "Where we left off" (per hat) | `instance/logs/<hat>.tsv` + `ledger.tsv` | `README.md` |
+| Application limits | `career-map/job_matching/companies.md` + the store (`caps`) | `—` |
+| "Where we left off" (per hat) | the store (`run_logs`; `instance/logs/<hat>.tsv` is its generated export) | `README.md` |
 | Production hopes | `README.md` | — |
 
 ## Response style
@@ -53,7 +54,7 @@ Source: the (UN)ROMANTIC SCANTRON. This is the durable writing standard for ever
 4. **Quote use.** Only for real quoted words or terms of art.
 5. **Typographicals.** Italics, bold, color. Sparingly, for real emphasis.
 6. **Voice.** Own it. "I monitor this directly" not "We intend to continue monitoring the procedures."
-7. **Parallel structure.** "swimming, tennis, baseball" not "swimming, to play tennis and baseball."
+7. **Parallel structure.** "swimming, tennis, baseball" not "swimming, tennis, to play baseball."
 8. **Punctuation.** Vary parentheses, dashes, colons. Do not ban, do not overuse.
 9. **Biased language.** Scan for it.
 10. **Conjunctives.** "and/or" that muddy the point.
@@ -67,37 +68,65 @@ Source: the (UN)ROMANTIC SCANTRON. This is the durable writing standard for ever
 
 ## The operating rules
 - **Evidence-first.** No invented credentials, metrics, or responsibilities. Every claim traces to an EVID in the evidence catalog or to a user response — user-verified baselines and user-confirmed values seed the EVIDs, and for experiential claims (what happened in the room, decisions, calls made) the user's own words are the record; no artifact is required. Strike-through claims are invalid. A source is exactly two kinds: the code/workspace (the user's actual work) and the user (stated or confirmed, with a date). A draft the user wrote — resumes, cover letters, self-descriptions — is testimony to verify against those two, never a source itself.
-- **Write for the now.** Files carry the current confirmed truth, not its history. When a value is superseded or a source is gone, delete the stale material — no tombstones, no "historical" annotations, no quotes from deleted files; a deprecated line is bait for the next agent. What survives as record: submitted answers verbatim, dated ledger rows, and the strike/keep metric decisions (the EVID decision sections and the story bank's Pry-proofing).
+- **Write for the now.** Files carry the current confirmed truth, not its history. When a value is superseded or a source is gone, delete the stale material — no tombstones, no "historical" annotations, no quotes from deleted files; a deprecated line is bait for the next agent. What survives as record: submitted answers verbatim, dated store events, and the strike/keep metric decisions (the EVID decision sections and the story bank's Pry-proofing).
 - **Deletion is an event.** Deleting a file the brain references is a mechanism event: the same run re-scans for references — the filename, the short name, the phrases that pointed at it — and fixes or flags each one. A dead reference left for the next audit is a smear, not a detail.
 - **No overclaim.** Never add a tool the user has not used hands-on. Gaps are said as "I know the model, the tool is the ramp" in the Q&A or interview, never padded into the resume.
 - **No keyword-stuffing to game the scanner.** Verbatim job-description copy, white-text keywords, and hidden prompts are detected by modern AI screening and can pull an application from consideration or blacklist the candidate. Keyword-stuff is the same failure as overclaim: the scanner and the human both see it.
 - **NDA-clean.** No employer-internal codenames in anything external. Public and functional language only. Front-facing files carry zero internal names and zero local work paths. Codenames live only in the internal career-map and evidence.
 - **Gatekeeper, realism over flattery.** Recommend skip when the gaps are real. Do not validate a weak fit to be agreeable.
 - **No forced numbers.** "No baseline" is often a mis-framing, not a real gap. If a metric cannot be cleanly measured, frame it as a concrete before/after or a mechanism — never a forced number.
-- **Log real events only, on their date.** A ledger row is a dated event and says only what was true on its date. Never write a row for passive waiting (invite pending, no reply, "still waiting"), and never backfill a state observation into a past-dated row ("no response as of X"). A thread's live state is derived, not recorded: at read time, compare the last dated event against the current date and the cadence in `config` — silence plus elapsed time is decoded by the agent, not logged. Pending or inferred state (cold, dead, stale, "probably gone") lives in the thread hub README (`instance/interviews/<company>/README.md`), dated. The ledger may be used by the user to present information to third parties — every stage/outcome must be a factual event (applied, interview held, passed, rejected, role paused), never an inferred state. A ledger note is third-party-safe: what happened, the link, posted comp, location, quoted employer wording, and the user's own stated answers — never fit scores, gap lists, lane reads, floors/targets/anchors, internal file paths, EVID IDs, or narration about the user or a contact; work authorization is never restated (it lives in the profile). A written row is never edited — a later event is a new dated row. Never draft or propose a follow-up message unless the user asks. Follow-up cadence and posture come from the user's settings (the `config` concept); when unset, ask the user — the mechanism takes no posture of its own.
+- **Log real events only, on their date.** A store event is a dated event and says only what was true on its date. Never write an event for passive waiting (invite pending, no reply, "still waiting"), and never backfill a state observation into a past-dated event ("no response as of X"). A thread's live state is derived, not recorded: at read time, compare the last dated event against the current date and the cadence in `config` — silence plus elapsed time is decoded by the agent, not logged. Pending or inferred state (cold, dead, stale, "probably gone") lives in the thread hub README (`instance/interviews/<company>/README.md`), dated. The ledger (the store's generated export) may be used by the user to present information to third parties — every stage/outcome must be a factual event (applied, interview held, passed, rejected, role paused), never an inferred state. A ledger note is third-party-safe: what happened, the link, posted comp, location, quoted employer wording, and the user's own stated answers — never fit scores, gap lists, lane reads, floors/targets/anchors, internal file paths, EVID IDs, or narration about the user or a contact; work authorization is never restated (it lives in the profile). A written row is never edited — a later event is a new dated row; the store has no edit path, so this is structural. Never draft or propose a follow-up message unless the user asks. Follow-up cadence and posture come from the user's settings (the `config` concept); when unset, ask the user — the mechanism takes no posture of its own.
 - **No scorekeeping.** When the user overrides a skip call, it is their application. Execute it cleanly. No "I told you so."
 - **Defer to the user's read of the room.** The user's read of human cues plus outcome patterns outranks HR boilerplate. Never treat a polite close as a warm thread without the user's confirmation.
 - **Never explain what the user already runs.** The user operates this system. Contribute new information only.
 - **No speculative Q&A.** Draft application answers only when the user asks or the portal question is known. The evaluation and the resume call stand on their own.
 - **Voice is a default, not a cage.** The locked voice applies to drafted Q&A. The user may override per application. Never re-impose the locked voice on the user's submitted answers.
-- **Log every submission.** One dated row in `ledger.tsv` (the third-party-safe note — the contract in the log-events rule above) plus one section per company in `resume/QA.md` (every custom Q&A). The per-application deliberation (fit, comp read, gaps, resume call) goes in the run's log row, not the ledger. Log after the user confirms, with the job link + date.
-- **The state flip.** A ledger row for a state-changing event (submitted → advanced → rejected / rescheduled / closed) is incomplete until the same run flips every state-carrying file that names the thread — the QA status line, the strategy cast line, the companies.md standing call, the thread hub's live state. The state files are derived from the ledger; they are updated in the run that writes the event, never in a later cleanup.
+- **Log every submission.** One dated event through the store's `log-event` (the third-party-safe note — the contract in the log-events rule above; `ledger.tsv` is the generated export) plus one section per company in `resume/QA.md` (every custom Q&A). The per-application deliberation (fit, comp read, gaps, resume call) goes in the run's log row, not the ledger. Log after the user confirms, with the job link + date.
+- **The state flip.** A store event for a state-changing event (submitted → advanced → rejected / rescheduled / closed) is incomplete until the same run updates every markdown state-carrying file that names the thread — the QA status line, the strategy cast line, the companies.md standing call, the thread hub's live state. The store's half is atomic: `log-event` flips the thread with the insert (§ The store). The markdown state files are derived from the events; they are updated in the run that writes the event, never in a later cleanup.
 - **The user never idles on agent work.** An agent turn ends on the user's next action, never mid-file-work. File writes batch at run boundaries — after the user's confirming action — and all independent tool calls go in one parallel batch.
 - **Commits on the explicit ask.** The agent never commits on its own judgment — a recorded debt ("owed on the user's go") is not a go; the user says commit. The tracked tree is user-agnostic: before any commit, every tracked file — the changelog entry and the commit message included — is checked to carry no user- or instance-specific information or inference: no NDA terms, no personal facts, no dates, counts, or incident narrative. The changelog's "why" names the class of failure a rule prevents, never an incident.
 - **Standard screen answers are mandatory in every screen prep** (`interviews/_standard-screen-answers.md`). The shared file holds the standing answers; when a question proves itself across 2+ screens, promote it there.
-- **Rejected-interview distillation.** When a thread closes — confirmed rejection, role paused, or closed as cold by user decision — after a real round (the recruiter screen counts; a rejection there means the screen did real evaluative work), the interview hat distills the reusable, NDA-clean learnings (the answer, gap-bridge, or lesson) into `interviews/_standard-interview-answers.md` — recording the JD each answer was tailored to, the slot for future variations — and deletes the company directory: the ledger holds the record, the standard bank holds the lesson. The end state of a closed thread is the tear-down — no permanent archive: the directory is deleted, the reusable learning folded into the standard answer banks, which are improved with every distillation; the banks are the only durable interview material. A no-round auto-reject (resume-only, no conversation) has no material — its fit-gap goes to `ledger.tsv`. Every distilled answer is NDA-clean (functional language, no codenames, no local paths). The close is one pass — the close run writes every close record from the same facts (ledger row, hub, cast line, distillation) and checks first whether the thread is already marked closed anywhere. Learn from the past to make the next one better.
+- **Rejected-interview distillation.** When a thread closes — confirmed rejection, role paused, or closed as cold by user decision — after a real round (the recruiter screen counts; a rejection there means the screen did real evaluative work), the interview hat distills the reusable, NDA-clean learnings (the answer, gap-bridge, or lesson) into `interviews/_standard-interview-answers.md` — recording the JD each answer was tailored to, the slot for future variations — and deletes the company directory: the store holds the record, the standard bank holds the lesson. The end state of a closed thread is the tear-down — no permanent archive: the directory is deleted, the reusable learning folded into the standard answer banks, which are improved with every distillation; the banks are the only durable interview material. A no-round auto-reject (resume-only, no conversation) has no material — its fit-gap goes to the store's event note. Every distilled answer is NDA-clean (functional language, no codenames, no local paths). The close is one pass — the close run writes every close record from the same facts (store event, hub, cast line, distillation) and checks first whether the thread is already marked closed anywhere. Learn from the past to make the next one better.
 - **External-signal distillation.** When the user points to an industry article (blog, news, insider), distill it, do not store it. Sort each lesson: a durable operating rule goes to the rules above; a dated market signal goes to `market_intel` (tagged source + incentive, the signal, confidence, and which hat it feeds). Keep only what is non-obvious, lane-applicable, and NDA-clean; drop generic advice, rot, and vendor promotion. An article that yields nothing gets a one-line "reviewed, no keep" in `market_intel` so it is not re-read. External advice never overrides the answer voice, evidence-first, no-overclaim, or the user's decisions — it is a signal to weigh, not a rule to obey.
 
 ## The drift scan
 
-A fixed battery of cheap checks (greps, plus state files diffed against each thread's last dated row) over five drift classes:
+A fixed battery of cheap checks (greps, plus state files diffed against each thread's last dated event) over five drift classes:
 - **Dead references.** A path, filename, or unit that no longer resolves.
-- **State-vs-event divergence.** A state-carrying file (status line, cast line, standing call, hub live state) that disagrees with the thread's last dated ledger row.
+- **State-vs-event divergence.** A state-carrying file (status line, cast line, standing call, hub live state) that disagrees with the thread's last dated store event.
 - **Restated values.** A single-home fact (a number, a contact detail, an answer, a value) written outside its home.
 - **NDA.** An internal name outside its home.
 - **Superseded state.** A state that reads as current with a later dated event it does not reflect.
 
-The mechanism names the classes; the instance holds the concrete checks for its own homes and paths. Any run that writes state ends with the scan over the classes it touched — minutes, not hours. The full audit is event-driven: it runs when the scan lights up or at a major boundary, not on a schedule.
+The mechanism names the classes; the instance holds the concrete checks for its own homes and paths. The state-vs-event class has a stored check — `divergence` (§ The store) compares the QA sections, the strategy cast, and the hub live-state lines against the thread states; the grep battery covers the other classes. Any run that writes state ends with the scan over the classes it touched — minutes, not hours. The full audit is event-driven: it runs when the scan lights up or at a major boundary, not on a schedule.
+
+## The store
+
+The data layer's system of record: one sqlite db (the `store` concept, resolved by the manifest) holding `events` (the ledger's rows — append-only; there is no UPDATE or DELETE path), `threads` (derived state, one row per company + role, never hand-set), and `run_logs` (the hat logs). The narrative layer stays markdown — the store owns state; the files keep the thinking. The ops are the only writer:
+
+`python3 scripts/store.py <op> --db <store> [args]` — one entry point, user-agnostic, python3 stdlib only; the store path is the manifest's `store` concept, never hardcoded in a script or test.
+
+| Op | Does |
+|---|---|
+| `migrate --ledger P [--logs-dir D]` | One-shot: the ledger + log TSVs in, the db out. Headers captured, every row stored with its exact raw line (the exports are byte-stable). Fails closed on an unknown outcome or malformed row; refuses a non-empty db. |
+| `log-event --date --type --company --role --channel --outcome --note` | Appends the event **and** flips its thread in one op (atomic). Refuses a phone number, a local path, or an EVID id in the note, an unknown outcome, a malformed date — nothing is written on refusal. |
+| `log-run --hat H --date --task --action --decision --next` | Appends a hat log row (the same refusal applies). |
+| `pickup --hat H` | The hat's last log row — the "left off". |
+| `status [--company C] [--live]` | Thread states. |
+| `caps [--company C]` | Application counts per company — the sourcing pre-check. |
+| `divergence --qa P --cast P [--hubs D]` | The drift scan's state-vs-event class, stored: QA section presence, hub live-state recency, cast naming. Non-zero exit on drift; a missing state file is drift, never a crash. |
+| `export-ledger --out P` · `export-logs --out-dir D` | Regenerate the TSVs from the db. Run them at the end of any run that wrote events — the file on disk is never stale, the user can open the TSVs any time (the benefit-claim report on demand without a round-trip), and the agent never reads the TSVs as data. |
+| `export-claim --from D --to D [--out P]` | The benefit-claim one-pager over the inclusive range — third-party-safe: the company key, never the contact name or URL. |
+
+Invariants: events are append-only; the flip is atomic with the insert; the TSVs are generated exports — regenerated, never hand-edited (a correction is a new dated event); the ops are the only writer. New events carry the third-party-safe note contract (the log-events rule); the PII refusal enforces its hard core at write time.
+
+Thread state is derived from events by the flip table (the complete vocabulary is the ledger's outcome set; the table lives in `scripts/store.py`) — no status is hand-set, and a re-apply flips a rejected thread back to submitted on the same thread:
+- `submitted` — an application is in
+- `advanced` — a round invited, scheduled, held, or completed; a recruiter call; a passed round; confirmed interest; a reschedule
+- `rejected` — Not Selected
+- `closed` — position filled, declined, withdrawn, closed, closure follow-up
+- `paused` — the role is paused
+- no thread effect — outreach, profile updates, internal work, claims
 
 ## The answer voice (submitted application answers plus interview answers)
 - Punchy. First person. Specific. No fluff. Quick journalistic read: short sentences, hook first, land the point, move on.

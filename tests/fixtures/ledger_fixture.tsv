@@ -1,0 +1,11 @@
+Date	Activity Type	Company/Contact	Role	Method	Stage/Outcome	Note/Links
+3/1/2026	Job Application	Acme	Data Pipeline Engineer	Company Portal	Application Submitted	portal, req #1001
+3/2/2026	Job Application	Acme	Search Infra Engineer	Company Portal	Application Submitted	"Submitted via Greenhouse | https://acme.example/jobs/1002"
+3/2/2026	Job Application	Initech	Data Engineer	Company Portal	Application Submitted	
+3/3/2026	Interview Invitation	Acme	Search Infra Engineer	Email	Interview Invited	screen set; recruiter said "strong fit"
+3/4/2026	Interview	Acme	Search Infra Engineer	Email	Completed	"panel feedback: ""would move forward,"" per notes"
+3/5/2026	Interview Invitation	Acme	Data Pipeline Engineer	Email	Interview Invited	screen offered
+3/5/2026	Recruiter Follow-up	Acme	Data Pipeline Engineer	Email	Not Selected	closing note | role may reopen
+3/6/2026	Recruiter Follow-up	Globex	Data Engineer	Email	Not Selected	no fit this cycle
+3/10/2026	Job Application	Globex	Data Engineer	Company Portal	Application Submitted	re-apply after rejection
+3/11/2026	Networking/Outreach	Globex	Data Engineer	LinkedIn	Outreach	recruiter replied; waiting on details
