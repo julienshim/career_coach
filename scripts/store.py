@@ -23,7 +23,7 @@ import tempfile
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
-  id        INTEGER PRIMARY KEY,        -- insertion order = ledger row number
+  id        INTEGER PRIMARY KEY,        -- insertion order; the export is date-ordered (id breaks same-day ties)
   date      TEXT NOT NULL,              -- as recorded, e.g. '3/1/2026'
   date_iso  TEXT NOT NULL,              -- '2026-03-01' (range queries, benefit-claim week logic)
   type      TEXT NOT NULL,              -- the Activity Type value, as recorded
@@ -359,7 +359,9 @@ def export_ledger(db_path, out_path):
             raise ValueError("no ledger header in db (was migrate run?)")
         rows = [
             r[0]
-            for r in conn.execute("SELECT raw_row FROM events ORDER BY id").fetchall()
+            for r in conn.execute(
+                "SELECT raw_row FROM events ORDER BY date_iso, id"
+            ).fetchall()
         ]
     finally:
         conn.close()

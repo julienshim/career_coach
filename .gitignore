@@ -13,8 +13,9 @@
 *.db-shm
 *.db-wal
 
-# In-progress working artifacts at the root: drafts of mechanism docs that
-# carry instance data while they are being written. Never tracked.
+# Superseded design references at the root: the v1 store design docs. The
+# shipped contract is standards/STANDARDS.md (The store) + scripts/store.py;
+# these hold the schema history. They carry instance data - never tracked.
 store-design.md
 store-plan.md
 

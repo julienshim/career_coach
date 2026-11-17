@@ -60,6 +60,21 @@ class TestMigrate(unittest.TestCase):
         store.export_ledger(self.db, out)
         self.assertEqual(out.read_bytes(), (helpers.FIXTURES / "ledger_fixture.tsv").read_bytes())
 
+    def test_export_ledger_orders_backdated_event_by_date(self):
+        store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
+        # a late-confirmed event: dated 3/9, logged after the 3/10 and 3/11 rows
+        store.log_event(
+            self.db, "3/9/2026", "Job Application", "Globex", "Data Engineer",
+            "Company Portal", "Application Submitted", "late-confirmed submission",
+        )
+        out = pathlib.Path(self.tmp.name) / "backdated.tsv"
+        store.export_ledger(self.db, out)
+        lines = out.read_text().splitlines()
+        idx = [i for i, l in enumerate(lines) if l.startswith("3/9/2026")][0]
+        self.assertTrue(lines[idx - 1].startswith("3/6/2026"))
+        self.assertTrue(lines[idx + 1].startswith("3/10/2026"))
+        self.assertTrue(lines[-1].startswith("3/11/2026"))
+
     def test_refuses_nonempty_db(self):
         store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         with self.assertRaises(ValueError):
