@@ -15,6 +15,7 @@
 - The new user's raw material (their code dir, their history, their words).
 
 **The process.**
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. **Interview.** The user's story in their words: the origin, the work, the gaps they found, the tool they built, the staying power.
 2. **Examine the work.** Read the actual artifacts. What is real, what is the receipt.
 3. **Build the evidence.** EVIDs for every claimable thing. The ground truth.
@@ -25,6 +26,6 @@
 
 **Output contract.** A filled `instance/` (including its `career-map/`) in the standard schemas, with a `MANIFEST.md` that resolves every concept. The hats now run for this user with no changes.
 
-**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/discovery.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat discovery` is the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/discovery.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat discovery` is the "left off" for this hat — and its `next` is the working set: forward directives are written scoped (the thread named, time-bound items carrying the window), and a run applies only the directives whose thread is still live and whose window has not passed; a directive past its thread or its window is not in force, and if it looks like it should still matter, that is a question to the user, not an enforcement (the rule in `standards/STANDARDS.md` § The execution rules).
 
 **Must not do.** Do not invent a metric to make the profile look better. Do not fill a schema field the user has not given. Leave it open in `instance/career-map/review/unknowns.md`.

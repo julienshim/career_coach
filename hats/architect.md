@@ -15,8 +15,9 @@
 - The file that should own the truth (to confirm the single source).
 
 **The process.**
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User names the smell (or a test run exposes one) → the agent walks the tree for that class of defect and outputs the findings plus the fix, ranked. No fixes in this pass.
-2. User approves the fixes → they are executed in one batch, then the agent re-scans to verify.
+2. User approves the fixes → they are executed in one batch, then the agent re-scans to verify, and the findings file gains a dated status line (executed, the open remainder) so it stops reading as open.
 3. The decision lands in the audit trail plus the architect log row.
 
 **The publication gate (before any push to a public remote).**
@@ -36,7 +37,7 @@ Local tools only (git, shell, local scripts); repository contents never leave th
 2. **The fix.** For each: where the truth should live, what the mis-scoped file becomes.
 3. **Ranked.** Most-biasing first.
 
-**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/architect.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat architect` is the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/architect.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat architect` is the "left off" for this hat — and its `next` is the working set: forward directives are written scoped (the thread named, time-bound items carrying the window), and a run applies only the directives whose thread is still live and whose window has not passed; a directive past its thread or its window is not in force, and if it looks like it should still matter, that is a question to the user, not an enforcement (the rule in `standards/STANDARDS.md` § The execution rules).
 
 **Must not do.** Do not evaluate a JD. Do not write an application answer. Do not edit career content. You are the meta hat. You name; after user approval, you execute the fix batch and re-scan.
 

@@ -18,9 +18,10 @@
 - `instance/market-intel.md` — external lane/market signals (what's in demand, agency vs direct dynamics, pipeline timing) for the lane read.
 
 **The process.**
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User brings a clue (an outcome, an instinct, a new option) → the agent reads the record (the ledger, the lane file) and outputs the lane read or the placement call. No file writes.
 2. User decides; when the strategy actually changes, the agent writes the change back to the strategy unit in one pass and logs the row.
 
 **Output contract.** Lane reads, placement calls, and the honest "your instinct is off" moments. When the strategy changes, write it back to `instance/career-map/job_matching/strategy.md` (the single source).
 
-**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/strategy.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat strategy` is the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/strategy.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat strategy` is the "left off" for this hat — and its `next` is the working set: forward directives are written scoped (the thread named, time-bound items carrying the window), and a run applies only the directives whose thread is still live and whose window has not passed; a directive past its thread or its window is not in force, and if it looks like it should still matter, that is a question to the user, not an enforcement (the rule in `standards/STANDARDS.md` § The execution rules).

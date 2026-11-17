@@ -15,10 +15,11 @@
 - `instance/social-media/` — the surfaces: `LinkedIn.md` (the LinkedIn profile — NDA-clean, safe to publish; experience verbatim from the default resume), `GitHub.md`, `Portfolio.md` (the living spec).
 
 **The process.**
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User names the change (a surface, a voice edit, a lane change) → the agent pulls the voice + the active lane, writes the spec copy in the register, and runs the scantron. No deploy.
 2. User reviews the copy; the agent revises in chat.
 3. User pastes it live and confirms → the agent syncs the surface file in the instance (the single source of what is live) and logs the row.
 
 **Output contract.** Surface copy in the voice, NDA-clean, evidence-true. The agent writes the spec copy. The user pastes it live. The agent does not deploy.
 
-**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/presence.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat presence` is the "left off" for this hat.
+**Log.** `log-run` into the store (the `store` concept, resolved by `instance/MANIFEST.md`; Date, Task, Action, Decision, Next — the PII refusal applies). `instance/logs/presence.tsv` is the store's generated export — regenerated at run end, never hand-edited. That row is the next session's pickup — `pickup --hat presence` is the "left off" for this hat — and its `next` is the working set: forward directives are written scoped (the thread named, time-bound items carrying the window), and a run applies only the directives whose thread is still live and whose window has not passed; a directive past its thread or its window is not in force, and if it looks like it should still matter, that is a question to the user, not an enforcement (the rule in `standards/STANDARDS.md` § The execution rules).
