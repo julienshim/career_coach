@@ -61,13 +61,13 @@ CREATE TABLE IF NOT EXISTS run_logs (
   next     TEXT NOT NULL,
   raw_row  TEXT NOT NULL                -- exact original line; the export reproduces it verbatim
 );
--- Phase-1 knowledge layer (the architecture spec, sections 5.1-5.7): additive
--- tables; a pre-Phase-1 db upgrades by being opened (IF NOT EXISTS). The
--- existing events/threads/run_logs tables are untouched (their re-modeling
--- is Phase 2). The instruction table carries two deltas from the spec:
--- scope_ref_text (a non-id scope target: a hat name or stage label) and the
--- 'suggested' status (an agent-suggested directive, not in force until the
--- user's verify-instruction).
+-- Knowledge layer: additive tables; a pre-existing db upgrades by being
+-- opened (IF NOT EXISTS). The existing events/threads/run_logs tables are
+-- untouched (their re-model is a planned later step). The instruction table
+-- carries two deltas from the original design: scope_ref_text (a non-id
+-- scope target: a hat name or stage label) and the 'suggested' status (an
+-- agent-suggested directive, not in force until the user's
+-- verify-instruction).
 CREATE TABLE IF NOT EXISTS person (
   id            INTEGER PRIMARY KEY,
   full_name     TEXT NOT NULL,
@@ -312,10 +312,10 @@ CREATE TABLE IF NOT EXISTS document_achievement (
   governance_state TEXT NOT NULL DEFAULT 'user_fact',
   UNIQUE (document_id, achievement_id)
 );
--- Ruling (Phase 1): the spec's 5.5 plain two-column shape is superseded by
--- its own cross-cutting rule (governance applies to every junction row) and
--- by the junction ops (link/verify/reject/unlink target rows by id) — this
--- junction carries the same shape as the others.
+-- Ruling: the plain two-column junction shape is superseded by the
+-- cross-cutting governance rule (governance applies to every junction row)
+-- and by the junction ops (link/verify/reject/unlink target rows by id) —
+-- this junction carries the same shape as the others.
 CREATE TABLE IF NOT EXISTS achievement_evidence (
   id             INTEGER PRIMARY KEY,
   achievement_id INTEGER NOT NULL REFERENCES achievement(id),
@@ -995,7 +995,7 @@ JUNCTIONS = {
 # "in" = rows of the other type carry the entity's id in their column
 # (reverse walk). Every entry's column sits on the entity_type side, so
 # every entry is "out"; a walker reaching an edge from the other side
-# derives "in" from which side it sits on. rel names: spec section 6 taxonomy.
+# derives "in" from which side it sits on. rel names: the named relationship types.
 FKS = [
     ("role",          "person_id",       "person",      "held",               "out"),
     ("role",          "company_id",      "company",     "employs",            "out"),
@@ -1036,7 +1036,7 @@ def _upsert(conn, table, key_where, provided, defaults):
     create-only values for columns not in provided (governance defaults,
     enum defaults). Returns the row id.
 
-    The conflict rule (spec, duplicate + conflict handling): a provided
+    The conflict rule (duplicate + conflict handling): a provided
     value that differs from a stored non-NULL value is refused — a
     ValueError naming the table, key, field, stored and given values — and
     nothing is written. Stored NULLs may be filled by a re-run (those
@@ -1417,7 +1417,7 @@ def governance(db_path, state):
     """List every GOVERNED row in the given state as
     (table, id, name, state, provenance, created_at). A junction row's name
     is 'from_name -> to_name'. state is validated against the five-value
-    enum (spec section 10). Deterministic order: GOVERNED table order,
+    enum (the GOV_STATES constant). Deterministic order: GOVERNED table order,
     then row id."""
     if state not in GOV_STATES:
         raise ValueError("bad governance state %r (want one of: %s)"
@@ -1662,7 +1662,8 @@ def withdraw_instruction(db_path, row_id):
 
 
 def working_set(db_path, hat, thread_id=None, today=None):
-    """The derived working set (spec 5.7): rows where status='active' AND
+    """The derived working set (the working-set rule in standards): rows
+    where status='active' AND
     unexpired (valid_until IS NULL OR valid_until >= today ISO — a window
     ending today is still in force; expiry is the drift check's flip, and
     thread liveness is its finding, neither is a clause of this query)
@@ -2031,7 +2032,8 @@ def main(argv=None):
     p.add_argument("--today")
 
     p = sub.add_parser("working-set",
-                       help="the derived working set for a hat (spec 5.7)")
+                       help="the derived working set for a hat (standards: "
+                            "the working-set rule)")
     p.add_argument("--db", required=True)
     p.add_argument("--hat", required=True)
     p.add_argument("--thread-id", type=int, dest="thread_id")

@@ -178,6 +178,12 @@ The directives got the same treatment. A run's live instructions used to be pros
 
 The markdown stayed. The rows are the queryable index on top of it — the files keep the thinking, and the store now owns the relationships too.
 
+### 10. Drawing the documentation boundary
+
+The build that added the knowledge layer came with its working documents: the architecture consultation that became the build's spec, and the task plan that executed it. While the mechanism was unbuilt, the spec was the forward contract, so it was tracked. Once the build landed, the contract lives where the product lives — the schema in the code, the ops contract in the standards, the behavior rules in the hats. What remained was a frozen consultation standing next to the living contract it once described: drift waiting to happen, and owner working material in a pushable tree.
+
+The boundary now matches what the root design docs already established: design, consultation, and planning documents live under `docs/` and are gitignored — never tracked. The tracked tree is the product: the hats, the standards, the store tooling, and the record of what changed. And the why — why each piece exists, which failure class it prevents — lives in this journal, edited to the present. A deliverable is read once; a journal is read every time someone asks why.
+
 ### Where it stands today
 
 The system is built on a small set of governing principles:

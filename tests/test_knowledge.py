@@ -185,7 +185,7 @@ class TestUpserts(unittest.TestCase):
                 self.assertEqual(row["created_at"], today)
                 self.assertEqual(row["updated_at"], today)
                 # provenance enum: user / imported / ai; user_fact is the
-                # governance_state value (the spec's two enums)
+                # governance_state value (the two enums: provenance + state)
                 if table in ("role", "project", "skill", "achievement", "document"):
                     self.assertEqual(row["provenance"], "user")
                     self.assertEqual(row["governance_state"], "user_fact")

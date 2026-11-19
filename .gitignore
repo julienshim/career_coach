@@ -19,4 +19,10 @@
 store-design.md
 store-plan.md
 
+# docs/: design, consultation, and planning docs — the owner's working
+# material for a build (the Phase-1 architecture doc + task plan). Same rule
+# as the root design docs above: the shipped contract is standards/ +
+# scripts/; the why lives in the README's journal. Never tracked.
+/docs/
+
 .DS_Store

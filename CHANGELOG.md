@@ -2,6 +2,11 @@
 
 Date + version (YYYY.MM.DD.N), newest first. One entry per commit that touches the mechanism, written at commit time, covering every mechanism change since the previous commit. N = that day's commit number. One line per change: what changed and why. Mechanism only — hats, standards, AGENTS, README, the registry contract. Instance changes are recorded in the hat logs and the ledger, not here. The entry is user-agnostic: the "why" names the class of failure a rule prevents, never an instance fact or inference (no dates beyond the entry's own version, no counts, no incident narrative). Uncommitted work lives in `git diff` and the hat logs; this file records what is in the commits. The design narrative — how and why the structure became what it is — lives in the README's How the System Evolved.
 
+## 2026.11.19.2
+
+- **Documentation boundary:** the build's design / consultation / planning documents (under `docs/`) untracked and gitignored — the same rule the root v1 store design docs already carry: owner working material, never the product. In-code references to the design doc's sections replaced with self-contained wording or pointers at the standards. Why: a frozen planning artifact tracked next to the living contract it once described is drift waiting to happen, and a pushable tree should carry only the product.
+- **README:** the journal (How the System Evolved) gains entry 10 — the documentation boundary.
+
 ## 2026.11.19.1
 
 - **Store (knowledge layer, new):** the schema gains the career knowledge layer — the person / company / role / project / skill / achievement / evidence / document entities, nine typed junction tables carrying the relationships, and the `instruction` table (scoped, expiring directives). Additive: a pre-existing db upgrades by being opened; the existing events/threads/run_logs tables are untouched. Why: the markdown career-map was the only relationship store — a relationship was queryable only by grep, and a link an agent drew was indistinguishable from a fact the user stated. Prevents the class of failure where the knowledge a run reasons over cannot be queried, filtered, or governed.

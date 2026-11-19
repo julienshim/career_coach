@@ -137,7 +137,8 @@ def _md(iso_date):
 
 
 class TestWorkingSet(unittest.TestCase):
-    """The derived working set: active + in-scope + unexpired (spec 5.7)."""
+    """The derived working set: active + in-scope + unexpired (the working-set
+    rule in standards)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -206,7 +207,7 @@ class TestWorkingSet(unittest.TestCase):
 
     def test_working_set_exact_ids(self):
         # row 5 is mechanically present: liveness is the drift check's
-        # job (Task 8), not the query's — spec 5.7 is active + scope +
+        # job, not the query's — the working-set rule is active + scope +
         # unexpired
         rows = store.working_set(self.db, "sourcing")
         self.assertEqual({r[0] for r in rows},
