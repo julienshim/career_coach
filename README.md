@@ -168,6 +168,16 @@ The fix was to give the data layer a system of record: a small database reached 
 
 The narrative layer — the identity, the evidence, the strategy, the interview hubs — stays in files. The store owns state; the files keep the thinking.
 
+### 9. Making relationships first-class
+
+The career map — the evidence, the skills, the resume, the roles — lived in markdown, and the relationships between them lived as free-text cross-references. Fine while a human was reading it. For the agent, a relationship was only as queryable as a grep: "which skills does this achievement demonstrate" meant re-reading the files, and a link an agent had drawn could not be told apart from a fact the user had stated — nothing on a relationship said who put it there, or whether the user had confirmed it.
+
+The fix extended the store with the knowledge layer: the career entities (person, company, role, project, skill, achievement, evidence, document), typed junction tables carrying the relationships, and a governance state on every row. A row written by an AI is born flagged; the only path to verified is the user's explicit op. And nothing is ever deleted — a rejected row is marked, and the history stays.
+
+The directives got the same treatment. A run's live instructions used to be prose in the hat's last log row — restated, drifted, re-applied out of scope. They are now rows: scoped, expiring, withdrawn on one flip. A run's working set is a derived query over those rows, and a drift check flags a directive that is still sitting in prose, pointing at a dead thread, or past its window. The log row now names the current task and points at the working set; it never restates the directives.
+
+The markdown stayed. The rows are the queryable index on top of it — the files keep the thinking, and the store now owns the relationships too.
+
 ### Where it stands today
 
 The system is built on a small set of governing principles:
