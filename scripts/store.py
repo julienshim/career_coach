@@ -15,6 +15,7 @@ python3 stdlib only. No dependencies.
 
 import argparse
 import datetime
+import json
 import os
 import pathlib
 import re
@@ -420,6 +421,13 @@ def db_connect(db_path):
     # single-sourced
     conn.execute("DROP VIEW IF EXISTS v_application_status")
     conn.execute(_status_view_sql())
+    # the FTS index is derived state — rebuilt on every open (the view
+    # pattern); the explicit commit makes the fill durable so the query
+    # service's separate read-only connection sees it
+    conn.execute("DROP TABLE IF EXISTS search_index")
+    conn.execute(_search_index_ddl())
+    conn.execute(_search_index_fill())
+    conn.commit()
     return conn
 
 
@@ -1231,6 +1239,447 @@ def add_interaction(db_path, kind, direction, occurred_at, contact=None,
         conn.close()
 
 
+# ---- Constrained query service (Phase 3) -----------------------------------
+# The analytical read path: a validated plan executes on a structurally
+# read-only connection as SQL assembled only from whitelisted identifiers
+# (the registry / the live schema — never plan strings) + bound ? params.
+
+def _read_only_connect(db_path):
+    """Open the store structurally read-only: the file itself refuses a
+    write, so the analytical path cannot write (spec section 9)."""
+    uri = pathlib.Path(db_path).resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _plan_from(plan):
+    """dict | JSON str -> dict. Bad JSON or a non-object is refused."""
+    if isinstance(plan, (bytes, bytearray)):
+        plan = plan.decode("utf-8")
+    if isinstance(plan, str):
+        try:
+            plan = json.loads(plan)
+        except ValueError as e:
+            raise ValueError("bad plan JSON: %s" % (e,))
+    if not isinstance(plan, dict):
+        raise ValueError("bad plan: want a JSON object")
+    return plan
+
+
+def _columns_of(conn, entity):
+    """The live-schema columns of a whitelisted entity (the double gate's
+    schema half — P2). entity comes from QUERY_ENTITIES, so it is safe
+    to interpolate."""
+    rows = conn.execute("PRAGMA table_info(%s)" % (entity,)).fetchall()
+    return [r[1] for r in rows]
+
+
+def _gate_entity(conn, entity):
+    if entity not in QUERY_ENTITIES:
+        raise ValueError(
+            "unknown entity %r (want one of: %s)"
+            % (entity, ", ".join(QUERY_ENTITIES)))
+    if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (entity,)).fetchone() is None:
+        raise ValueError("unknown entity %r (not in this db)" % (entity,))
+    return entity
+
+
+def _gate_filters(conn, entity, filters):
+    """Gate a filter list against the entity's live columns (P2)."""
+    if filters is None:
+        return
+    if not isinstance(filters, list):
+        raise ValueError("bad filters: want a list")
+    cols = _columns_of(conn, entity)
+    for i, f in enumerate(filters):
+        if not isinstance(f, dict):
+            raise ValueError("bad filter %d: want an object" % (i,))
+        field = f.get("field")
+        op = f.get("op")
+        if field not in cols:
+            raise ValueError("unknown field %r on %s" % (field, entity))
+        if op not in FILTER_OPS:
+            raise ValueError(
+                "bad filter op %r (want one of: %s)"
+                % (op, ", ".join(FILTER_OPS)))
+        if op in ("IS NULL", "IS NOT NULL"):
+            if f.get("value") is not None:
+                raise ValueError("filter op %r takes no value" % (op,))
+        else:
+            if f.get("value") is None:
+                raise ValueError("filter op %r requires a value" % (op,))
+            if op == "IN" and not (isinstance(f["value"], list)
+                                   and f["value"]):
+                raise ValueError("filter op IN requires a non-empty list")
+
+
+def _gate_order_by(conn, entity, order_by):
+    if order_by is None:
+        return
+    if not isinstance(order_by, dict):
+        raise ValueError("bad order_by: want an object")
+    cols = _columns_of(conn, entity)
+    if order_by.get("field") not in cols:
+        raise ValueError(
+            "unknown order_by field %r on %s" % (order_by.get("field"),
+                                                 entity))
+    if order_by.get("direction") not in ("asc", "desc"):
+        raise ValueError("bad order_by direction %r"
+                         % (order_by.get("direction"),))
+
+
+def _gate_limit(limit):
+    """A limit is a positive int <= MAX_LIMIT; None takes the default."""
+    if limit is None:
+        return DEFAULT_LIMIT
+    if not isinstance(limit, int) or isinstance(limit, bool) \
+            or limit < 1 or limit > MAX_LIMIT:
+        raise ValueError("bad limit %r (max %d)" % (limit, MAX_LIMIT))
+    return limit
+
+
+def _junction_direction(via, current):
+    """(target entity, target join column, stage join column) for
+    following `via` from `current` — both directions (P7). Refuses a
+    junction that does not touch the current entity, naming the
+    endpoints."""
+    spec = JUNCTIONS[via]
+    if current == spec["from"][0]:
+        return spec["to"][0], spec["to"][1], spec["from"][1]
+    if current == spec["to"][0]:
+        return spec["from"][0], spec["from"][1], spec["to"][1]
+    raise ValueError(
+        "junction %s does not touch %s (endpoints: %s, %s)"
+        % (via, current, spec["from"][0], spec["to"][0]))
+
+
+def _path_end_entity(entity, traverse):
+    """The entity at the end of the traversal path (walks the junction
+    endpoints; a disconnected step is refused here, at validation)."""
+    current = entity
+    for step in traverse:
+        current, _tcol, _jcol = _junction_direction(step["via"], current)
+    return current
+
+
+def _validate_plan(plan, conn):
+    """Full validation against the registry + the live schema (P2, P4,
+    P9, P10) — runs before any SQL. Refusals name the bad token.
+    Returns the normalized plan (limit / mode filled in)."""
+    if ("entity" in plan) == ("search" in plan):
+        raise ValueError("exactly one of 'entity' / 'search' is required")
+    plan = dict(plan)
+    if "search" in plan:
+        if not isinstance(plan["search"], str) or not plan["search"]:
+            raise ValueError("bad search: want a non-empty string")
+        entities = plan.get("entities")
+        if entities is not None:
+            if not isinstance(entities, list) or not entities:
+                raise ValueError(
+                    "bad search entities %r (want a non-empty list drawn "
+                    "from: %s)"
+                    % (entities, ", ".join(sorted(SEARCHED_COLUMNS))))
+            bad = [e for e in entities if e not in SEARCHED_COLUMNS]
+            if bad:
+                raise ValueError(
+                    "bad search entities %r (want them drawn from: %s)"
+                    % (bad, ", ".join(sorted(SEARCHED_COLUMNS))))
+        plan["limit"] = _gate_limit(plan.get("limit"))
+        return plan
+    entity = _gate_entity(conn, plan["entity"])
+    plan.setdefault("mode", "rows")
+    if plan["mode"] not in ("rows", "count", "group"):
+        raise ValueError("bad mode %r (want one of: rows, count, group)"
+                         % (plan["mode"],))
+    plan["limit"] = _gate_limit(plan.get("limit"))
+    _gate_filters(conn, entity, plan.get("filters"))
+    _gate_order_by(conn, entity, plan.get("order_by"))
+    traverse = plan.get("traverse")
+    if traverse is not None:
+        if not isinstance(traverse, list) or not traverse:
+            raise ValueError("bad traverse: want a non-empty list of steps")
+        if len(traverse) > MAX_TRAVERSAL_STEPS:
+            raise ValueError("too many traversal steps (max %d)"
+                             % (MAX_TRAVERSAL_STEPS,))
+        for i, step in enumerate(traverse):
+            if not isinstance(step, dict):
+                raise ValueError("bad traversal step %d: want an object"
+                                 % (i,))
+            if step.get("via") not in JUNCTIONS:
+                raise ValueError(
+                    "unknown junction %r (want one of: %s)"
+                    % (step.get("via"), ", ".join(JUNCTIONS)))
+            step_limit = step.get("limit")
+            if step_limit is not None:
+                step["limit"] = _gate_limit(step_limit)
+            _gate_filters(conn, _path_end_entity(entity, traverse[:i + 1]),
+                          step.get("filters"))
+            _gate_order_by(conn, _path_end_entity(entity, traverse[:i + 1]),
+                           step.get("order_by"))
+    if plan["mode"] == "group":
+        gb = plan.get("group_by")
+        if not isinstance(gb, dict) or gb.get("field") is None:
+            raise ValueError("group_by is required for group mode")
+        final = _path_end_entity(entity, traverse or [])
+        if gb["field"] not in _columns_of(conn, final):
+            raise ValueError("unknown group_by field %r on %s"
+                             % (gb["field"], final))
+    elif "group_by" in plan:
+        raise ValueError("group_by is only for group mode")
+    return plan
+
+
+def _where_sql(filters, prefix=""):
+    """(AND-joined clause or '', params) for a gated filter list. Field
+    identifiers were validated against the live schema; every value is
+    bound. prefix qualifies the identifiers (a traversal step's filters
+    run on a joined table — bare names would be ambiguous there)."""
+    if not filters:
+        return "", []
+    conds = []
+    params = []
+    for f in filters:
+        field, op = f["field"], f["op"]
+        col = prefix + field
+        if op == "IN":
+            conds.append(
+                "%s IN (%s)" % (col, ",".join("?" * len(f["value"]))))
+            params.extend(f["value"])
+        elif op == "IS NULL":
+            conds.append("%s IS NULL" % (col,))
+        elif op == "IS NOT NULL":
+            conds.append("%s IS NOT NULL" % (col,))
+        else:
+            sym = {"=": "=", "!=": "<>", ">": ">", "<": "<",
+                   ">=": ">=", "<=": "<=", "LIKE": "LIKE"}[op]
+            conds.append("%s %s ?" % (col, sym))
+            params.append(f["value"])
+    return " AND ".join(conds), params
+
+
+def _stage_sql(entity, filters, order_by, limit):
+    """SELECT * FROM <entity> [WHERE …] [ORDER BY …] [LIMIT ?] —
+    identifiers from the validated set, values bound. A stage without
+    order_by orders by id, so caps are deterministic (P9)."""
+    where, params = _where_sql(filters)
+    sql = "SELECT * FROM %s" % (entity,)
+    if where:
+        sql += " WHERE " + where
+    if order_by:
+        sql += " ORDER BY %s %s" % (order_by["field"],
+                                    order_by["direction"].upper())
+    else:
+        sql += " ORDER BY id"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    return sql, params
+
+
+def _rows_for(entity, rows):
+    """P6 row dicts: entity + id first, then the table's columns in
+    live-schema order."""
+    out = []
+    for r in rows:
+        d = dict(r)
+        row = {"entity": entity, "id": d.pop("id")}
+        row.update(d)
+        out.append(row)
+    return out
+
+
+def _traverse_step(conn, stage_entity, stage_rows, step, cap):
+    """One hop along a typed junction (P7): the stage's ids join the
+    junction to the other endpoint. One SQL; the stage's step filters
+    and order_by were validated against the target entity; the cap is
+    None only in aggregate modes without an explicit step limit.
+    Returns (target entity, rows) — deduped by id, first-seen order
+    (a many-to-many fan-out revisiting a target keeps one row)."""
+    via = step["via"]
+    target, tcol, jcol = _junction_direction(via, stage_entity)
+    ids = [r["id"] for r in stage_rows]
+    where, wparams = _where_sql(step.get("filters"), prefix="T.")
+    sql = ("SELECT T.* FROM %s AS J JOIN %s AS T ON T.id = J.%s "
+           "WHERE J.%s IN (%s)"
+           % (JUNCTIONS[via]["table"], target, tcol, jcol,
+              ",".join("?" * len(ids))))
+    params = list(ids)
+    if where:
+        sql += " AND " + where
+        params.extend(wparams)
+    if step.get("order_by"):
+        sql += " ORDER BY T.%s %s" % (step["order_by"]["field"],
+                                      step["order_by"]["direction"].upper())
+    else:
+        sql += " ORDER BY T.id"
+    if cap is not None:
+        sql += " LIMIT ?"
+        params.append(cap)
+    rows = conn.execute(sql, params).fetchall()
+    seen = set()
+    out = []
+    for r in rows:
+        if r["id"] in seen:
+            continue
+        seen.add(r["id"])
+        out.append(r)
+    return target, out
+
+
+def _search_execute(conn, vplan):
+    """The FTS5 search plan (P10): the query string is bound into MATCH
+    (never interpolated); a malformed FTS5 query is refused naming the
+    string. Matches resolve to real entity rows (citation-ready); order
+    is rank (bm25 — lower is better) then entity, id; capped at the
+    plan limit. The funnel is the per-entity pre-cap counts."""
+    search = vplan["search"]
+    entities = vplan.get("entities")
+    limit = vplan["limit"]
+    base = ("SELECT entity, id, rank FROM search_index "
+            "WHERE search_index MATCH ?")
+    params = [search]
+    if entities:
+        base += " AND entity IN (%s)" % (",".join("?" * len(entities)),)
+        params.extend(entities)
+    try:
+        total = conn.execute(
+            base.replace("SELECT entity, id, rank",
+                         "SELECT COUNT(*)"), params).fetchone()[0]
+        matched = conn.execute(
+            base + " ORDER BY rank, entity, id", params).fetchall()
+    except sqlite3.OperationalError as e:
+        raise ValueError("bad search query %r: %s" % (search, e))
+    returned = matched[:limit]
+    per_entity = {}
+    for m in returned:
+        per_entity.setdefault(m["entity"], []).append(m["id"])
+    cache = {
+        e: {r["id"]: r for r in conn.execute(
+            "SELECT * FROM %s WHERE id IN (%s)"
+            % (e, ",".join("?" * len(ids))), list(ids)).fetchall()}
+        for e, ids in per_entity.items()
+    }
+    results = []
+    for m in returned:
+        d = dict(cache[m["entity"]][m["id"]])
+        row = {"entity": m["entity"], "id": d.pop("id")}
+        row.update(d)
+        results.append(row)
+    funnel_counts = {}
+    order = []
+    for m in matched:
+        e = m["entity"]
+        if e not in funnel_counts:
+            order.append(e)
+        funnel_counts[e] = funnel_counts.get(e, 0) + 1
+    meta = {
+        "mode": "search",
+        "rows_returned": len(results),
+        "rows_total": total,
+        "truncated": total > len(results),
+        "stages": [{"entity": e, "rows": funnel_counts[e]} for e in order],
+    }
+    return {"results": results, "meta": meta}
+
+
+def query(db_path, plan):
+    """The constrained query service (spec section 9). The plan is
+    validated fully, then executed on a structurally read-only
+    connection (P3). Returns the envelope {"results": [...], "meta":
+    {...}} — every result row carries entity + id (citation-ready), and
+    the meta reports rows_returned / rows_total / truncated + the
+    per-stage funnel (P1, P4, P6)."""
+    plan = _plan_from(plan)
+    conn = db_connect(db_path)  # the derived-state rebuild pass
+    conn.close()
+    ro = _read_only_connect(db_path)
+    try:
+        vplan = _validate_plan(plan, ro)
+        if "search" in vplan:
+            return _search_execute(ro, vplan)
+        entity = vplan["entity"]
+        mode = vplan["mode"]
+        traverse = vplan.get("traverse") or []
+        # rows mode caps every stage (P4); count / group are uncapped
+        # row-wise (they return an aggregate) — an explicit step limit
+        # still applies in every mode.
+        root_limit = vplan["limit"] if mode == "rows" else None
+
+        def execute_path(uncap_final=False):
+            rsql, rparams = _stage_sql(entity, vplan.get("filters"),
+                                       vplan.get("order_by"), root_limit)
+            stage = ro.execute(rsql, rparams).fetchall()
+            funnel = [{"entity": entity, "rows": len(stage)}]
+            cur = entity
+            n = len(traverse)
+            for i, step in enumerate(traverse):
+                cap = step.get("limit")
+                if mode == "rows" and cap is None \
+                        and not (uncap_final and i == n - 1):
+                    cap = vplan["limit"]
+                cur, stage = _traverse_step(ro, cur, stage, step, cap)
+                funnel.append({"entity": cur, "rows": len(stage)})
+            return cur, stage, funnel
+
+        current, stage, funnel = execute_path()
+        if mode == "count":
+            n = len(stage)
+            meta = {
+                "entity": current,
+                "mode": "count",
+                "rows_returned": 1,
+                "rows_total": n,
+                "truncated": False,
+                "stages": funnel,
+            }
+            return {"results": [{"count": n}], "meta": meta}
+        if mode == "group":
+            gb = vplan["group_by"]["field"]
+            counts = {}
+            for r in stage:
+                counts[r[gb]] = counts.get(r[gb], 0) + 1
+            groups = [{gb: k, "count": v} for k, v in counts.items()]
+            none_groups = [g for g in groups if g[gb] is None]
+            valued = sorted((g for g in groups if g[gb] is not None),
+                            key=lambda g: g[gb])
+            valued.sort(key=lambda g: -g["count"])  # stable: key order kept
+            all_groups = none_groups + valued
+            total = len(all_groups)
+            groups = all_groups[:vplan["limit"]]
+            meta = {
+                "entity": current,
+                "mode": "group",
+                "rows_returned": len(groups),
+                "rows_total": total,
+                "truncated": total > len(groups),
+                "stages": funnel,
+            }
+            return {"results": groups, "meta": meta}
+        rows = _rows_for(current, stage)
+        if traverse:
+            _cur, total_stage, _f = execute_path(uncap_final=True)
+            rows_total = len(total_stage)
+        else:
+            csql, cparams = _stage_sql(entity, vplan.get("filters"),
+                                       vplan.get("order_by"), None)
+            csql = csql.replace("SELECT * FROM", "SELECT COUNT(*) FROM", 1)
+            rows_total = ro.execute(csql, cparams).fetchone()[0]
+        meta = {
+            "entity": current,
+            "mode": "rows",
+            "rows_returned": len(rows),
+            "rows_total": rows_total,
+            "truncated": rows_total > len(rows),
+            "stages": funnel,
+        }
+        return {"results": rows, "meta": meta}
+    finally:
+        ro.close()
+
+
 # ---- Phase-1 knowledge layer ops -------------------------------------------
 
 # entity type -> table + the label column (shown as the entity's name).
@@ -1327,6 +1776,69 @@ GOVERNED = ["role", "project", "skill", "achievement", "document"] + [
 
 GOV_STATES = ("user_fact", "imported", "ai_suggested",
               "user_verified", "rejected_outdated")
+
+# ---- Constrained query service (Phase 3) -----------------------------------
+# The analytical read path (spec section 9): a validated plan over a
+# whitelist of entities / fields / junctions, parameterized only, bounded,
+# executed on a structurally read-only connection. There is no free-form
+# SQL anywhere in this path.
+
+# The queryable entity roots. Excluded: meta / run_logs (mechanism tables),
+# search_index (the index itself), instruction (the working-set op is its
+# reader), note / note_reference (no write op — out of v1 scope),
+# v_application_status (view — the status op is its reader), and the nine
+# junction tables as roots (a traversal is the only path through a junction).
+QUERY_ENTITIES = [
+    "person", "company", "role", "project", "skill", "achievement",
+    "evidence", "document", "contact", "job_opening", "application",
+    "interview", "interaction", "event",
+]
+
+# The full-text index surface: entity -> the pinned text columns (the FTS
+# index is derived state, rebuilt at every open). Excluded: person (the
+# single PII-dense identity row), contact.email / contact.linkedin_ref
+# (PII), every *_ref / path pointer column (pointers are citations, not
+# searchable text), event.raw_row, and all id / date / stamp / governance
+# columns.
+SEARCHED_COLUMNS = {
+    "company": ("name", "industry"),
+    "role": ("title",),
+    "project": ("name",),
+    "skill": ("name",),
+    "achievement": ("title",),
+    "evidence": ("evid_id", "claim", "value"),
+    "document": ("title",),
+    "contact": ("name", "title"),
+    "job_opening": ("title",),
+    "application": ("role",),
+    "interview": ("round",),
+    "interaction": ("summary",),
+    "event": ("note", "type", "outcome"),
+}
+
+DEFAULT_LIMIT = 200
+MAX_LIMIT = 1000
+MAX_TRAVERSAL_STEPS = 3
+
+FILTER_OPS = ("=", "!=", ">", "<", ">=", "<=", "IN", "LIKE",
+              "IS NULL", "IS NOT NULL")
+
+
+def _search_index_ddl():
+    return ("CREATE VIRTUAL TABLE search_index "
+            "USING fts5(text, entity UNINDEXED, id UNINDEXED)")
+
+
+def _search_index_fill():
+    """The one-shot fill: one row per indexed (entity, id) — the pinned
+    text columns (SEARCHED_COLUMNS) space-joined, NULLs as empty."""
+    parts = []
+    for entity, cols in SEARCHED_COLUMNS.items():
+        text = " || ' ' || ".join("IFNULL(%s, '')" % (c,) for c in cols)
+        parts.append("SELECT '%s', id, %s FROM %s"
+                     % (entity, text, entity))
+    return ("INSERT INTO search_index (entity, id, text) "
+            + " UNION ALL ".join(parts))
 
 
 def _today_iso():
@@ -2296,6 +2808,15 @@ def main(argv=None):
     p.add_argument("--application-id", type=int, dest="application_id")
     p.add_argument("--summary")
 
+    p = sub.add_parser(
+        "query",
+        help="execute a validated retrieval plan (read-only; the "
+             "analytical path — standards, The store)")
+    p.add_argument("--db", required=True)
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--plan")
+    g.add_argument("--plan-file", dest="plan_file")
+
     p = sub.add_parser("upsert-person", help="create-or-verify the single person row")
     p.add_argument("--db", required=True)
     p.add_argument("--full-name", required=True, dest="full_name")
@@ -2532,6 +3053,10 @@ def main(argv=None):
                                 args.occurred_at, args.contact, args.company,
                                 args.application_id, args.summary)
         print("id %d" % rowid)
+    elif args.op == "query":
+        plan = args.plan if args.plan is not None else \
+            pathlib.Path(args.plan_file).read_text(encoding="utf-8")
+        print(json.dumps(query(args.db, plan), indent=2))
     elif args.op == "upsert-person":
         rowid = upsert_person(args.db, args.full_name, args.objective,
                               args.location, as_user=(args.as_user_flag != "ai"))

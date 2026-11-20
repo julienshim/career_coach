@@ -192,6 +192,14 @@ The application became the entity. The ledger rows now key on it, and the live s
 
 The legacy tables are gone from the schema, and "thread" in the store's sense is "application". The ledger's bytes are the proof.
 
+### 12. Bounding the analytical read
+
+The knowledge rows existed, but reaching across them was unbounded. A question that joined entities — which achievements demonstrate a skill, which evidence supports them — still meant pulling whole tables and filtering in the head, and nothing stopped a quick look from becoming an exhaustive sweep.
+
+The question became a plan. The analytical read path is a validated plan — an entity, filters, and up to three typed-relationship steps, or a full-text search — executed by a service against a whitelist of entities, fields, and typed relationships, on a connection that is read-only against the file. Parameterized only. Capped. No free-form SQL. The results are bounded rows, each row citing the entity and the id, and the envelope reports where the cap bit — the per-stage funnel. A full-text index over the named text columns (no contact email, no person row) is derived state — rebuilt at every open, like the status view. The analytical hats retrieve first, then reason over the cited set. And a recommendation that cites no record ids is invalid output.
+
+The plan is the only input, the connection the service uses cannot write, and every result row carries the id a recommendation can name. A read that cannot be made unbounded is the proof.
+
 ### Where it stands today
 
 The system is built on a small set of governing principles:
@@ -208,7 +216,7 @@ Together, these principles are designed to keep the system coherent as it grows.
 
 ## Where state lives
 
-The data layer's system of record is the store: one database holding the dated events, the applications (the entities the events key on), the application states (derived from the events, never hand-set), and the per-hat log rows. The named operations in `standards/STANDARDS.md` § The store are the only writer; everything else reads.
+The data layer's system of record is the store: one database holding the dated events, the applications (the entities the events key on), the application states (derived from the events, never hand-set), the derived full-text index, and the per-hat log rows. The named operations in `standards/STANDARDS.md` § The store are the only writer; everything else reads.
 
 - the store (the `store` concept, resolved by the manifest; by default `instance/db/`) — the system of record.
 - `instance/ledger.tsv` — the search record. A generated export of the store's events: regenerated at the end of any run that wrote events, never hand-edited.

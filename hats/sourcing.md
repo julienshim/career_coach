@@ -32,7 +32,7 @@
     - A same-role re-apply inside the limit window.
     - Company or role mismatch with the active lane in `strategy.md`.
 3. **Deep score (survivors only).** Fit X/5 overall.
-    - Skill match (1-5): 5 direct evidence, 4 strong indirect, 3 partial, 2 weak, 1 none. Prioritize core tech, data systems, cloud, infra, domain.
+    - Skill match (1-5): 5 direct evidence, 4 strong indirect, 3 partial, 2 weak, 1 none. Prioritize core tech, data systems, cloud, infra, domain. The skill match is scored from the store's `query` result set (skill → achievement → evidence — the retrieve-first path), and the score cites the record ids it rests on.
     - Experience match (1-5): years, scope, complexity, leadership.
     - Title alignment (1-5): target titles and whether the actual work matches.
 4. **Resume call.** Default `resume_default` as-is (resolved via `instance/MANIFEST.md`). A named honest keyword only if the JD asks by title. Per-application tailoring is copy, tailor, rename. Web scraping is on the default's skills line (a real hands-on asset — the user's scraping assets, see the `evidence` catalog); the depth is oral — the evidence ceiling is in `instance/resume/README.md`.

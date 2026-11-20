@@ -12,6 +12,7 @@
 - `instance/career-map/job_matching/strategy.md` — the lane analysis, the cast and what died, the differentiator.
 - `instance/career-map/job_matching/target_roles.md` — the role tiers.
 - `instance/ledger.tsv` — the full record.
+- The store's `query` op (the `store` concept, resolved by `instance/MANIFEST.md`) — cross-entity reads (skills ↔ achievements ↔ evidence; applications ↔ events) as bounded, cited result sets. A question that joins entities is answered from a plan, not a whole-table pull.
 - `instance/career-map/evidence/` — the evidence behind the claims.
 - `instance/profile.md` — the objective.
 - `instance/config.md` — the salary floor, the pace target.
@@ -19,7 +20,7 @@
 
 **The process.**
 **Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
-1. User brings a clue (an outcome, an instinct, a new option) → the agent reads the record (the ledger, the lane file) and outputs the lane read or the placement call. No file writes.
+1. User brings a clue (an outcome, an instinct, a new option) → the agent reads the record (the ledger, the lane file; a cross-entity question goes through the store's `query` op — retrieve first, then reason) and outputs the lane read or the placement call. No file writes.
 2. User decides; when the strategy actually changes, the agent writes the change back to the strategy unit in one pass and logs the row.
 
 **Output contract.** Lane reads, placement calls, and the honest "your instinct is off" moments. When the strategy changes, write it back to `instance/career-map/job_matching/strategy.md` (the single source).
