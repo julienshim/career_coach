@@ -17,13 +17,16 @@ class TestMigrate(unittest.TestCase):
     def test_migrate_counts(self):
         counts = store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         self.assertEqual(counts["events"], 10)
+        # the four fixture pairs with a status-setting event
+        self.assertEqual(counts["applications"], 4)
+        self.assertNotIn("threads", counts)
 
     def test_fields_and_dates(self):
         store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         conn = store.db_connect(self.db)
         row = conn.execute(
-            "SELECT date, date_iso, type, company, role, channel, outcome, note "
-            "FROM events WHERE id = 1"
+            "SELECT date, date_iso, type, company_key, role, channel, "
+            "outcome, note FROM event WHERE id = 1"
         ).fetchone()
         self.assertEqual(
             row,
@@ -35,7 +38,7 @@ class TestMigrate(unittest.TestCase):
     def test_quoting_variants_parse(self):
         store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         conn = store.db_connect(self.db)
-        notes = dict(conn.execute("SELECT id, note FROM events").fetchall())
+        notes = dict(conn.execute("SELECT id, note FROM event").fetchall())
         # r2: gratuitously quoted field, no trigger char
         self.assertEqual(notes[2], "Submitted via Greenhouse | https://acme.example/jobs/1002")
         # r3: empty note
@@ -48,13 +51,15 @@ class TestMigrate(unittest.TestCase):
     def test_raw_rows_preserved_verbatim(self):
         store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         conn = store.db_connect(self.db)
-        stored = [r[0] for r in conn.execute("SELECT raw_row FROM events ORDER BY id").fetchall()]
+        stored = [r[0] for r in conn.execute("SELECT raw_row FROM event ORDER BY id").fetchall()]
         lines = (helpers.FIXTURES / "ledger_fixture.tsv").read_text().split("\n")
         if lines and lines[-1] == "":
             lines.pop()
         self.assertEqual(stored, lines[1:])
 
     def test_export_ledger_byte_identical(self):
+        # The file-level byte-identity pin: the export reproduces the
+        # stored raw rows verbatim, in (date_iso, id) order.
         store.migrate(self.db, helpers.FIXTURES / "ledger_fixture.tsv")
         out = pathlib.Path(self.tmp.name) / "out.tsv"
         store.export_ledger(self.db, out)

@@ -111,23 +111,28 @@ class TestInstructions(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.instruction(self.db, "b", "preference", "application",
                               scope_ref_type="thread2")
+        # 'thread' is out of the enum (the store-entity sense is
+        # 'application' now)
+        with self.assertRaises(ValueError):
+            store.instruction(self.db, "b", "preference", "application",
+                              scope_ref_type="thread")
         self.assertEqual(self._count(), 0)
 
-    def test_thread_scope_shape(self):
+    def test_application_scope_shape(self):
         # the Phase-1 workhorse: an application-scoped directive pointed at
-        # a live thread
+        # a live application (created by the status-setting event)
         store.log_event(self.db, "11/17/2026", "Job Application", "Acme",
                         "Data Engineer", "Company Portal",
                         "Application Submitted", "synthetic")
-        tid = self.conn.execute("SELECT id FROM threads ORDER BY id"
+        aid = self.conn.execute("SELECT id FROM application ORDER BY id"
                                 ).fetchone()[0]
         rowid = store.instruction(self.db, "keep the follow-up cadence here",
                                   "constraint", "application",
-                                  scope_ref_type="thread", scope_ref=tid)
+                                  scope_ref_type="application", scope_ref=aid)
         row = self._row(rowid)
         self.assertEqual(row["scope_type"], "application")
-        self.assertEqual(row["scope_ref_type"], "thread")
-        self.assertEqual(row["scope_ref"], tid)
+        self.assertEqual(row["scope_ref_type"], "application")
+        self.assertEqual(row["scope_ref"], aid)
 
 
 def _md(iso_date):
@@ -144,7 +149,7 @@ class TestWorkingSet(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = pathlib.Path(self.tmp.name) / "t.db"
         self.conn = store.db_connect(self.db)
-        # Three threads: live A (submitted), live B (submitted),
+        # Three applications: live A (submitted), live B (submitted),
         # rejected C (submitted, then not selected).
         for role in ("Role A", "Role B", "Role C"):
             store.log_event(self.db, "11/10/2026", "Job Application", "Acme",
@@ -152,20 +157,21 @@ class TestWorkingSet(unittest.TestCase):
                             "synthetic")
         store.log_event(self.db, "11/15/2026", "Follow-up", "Acme", "Role C",
                         "Email", "Not Selected", "synthetic")
-        self.tA = self.conn.execute(
-            "SELECT id FROM threads WHERE role = 'Role A'").fetchone()[0]
-        self.tB = self.conn.execute(
-            "SELECT id FROM threads WHERE role = 'Role B'").fetchone()[0]
-        self.tC = self.conn.execute(
-            "SELECT id FROM threads WHERE role = 'Role C'").fetchone()[0]
+        self.aA = self.conn.execute(
+            "SELECT id FROM application WHERE role = 'Role A'").fetchone()[0]
+        self.aB = self.conn.execute(
+            "SELECT id FROM application WHERE role = 'Role B'").fetchone()[0]
+        self.aC = self.conn.execute(
+            "SELECT id FROM application WHERE role = 'Role C'").fetchone()[0]
         today = datetime.date.today().isoformat()
         yesterday = (datetime.date.today()
                      - datetime.timedelta(days=1)).isoformat()
         # The mixed instruction set (the brief's pinned ten):
         # i1 search_wide active; i2 hat 'sourcing' active; i3 hat
-        # 'interview' active; i4 thread A active, no expiry; i5 thread C
-        # (rejected) active; i6 valid_until yesterday; i7 valid_until
-        # today; i8 withdrawn; i9 suggested (ai); i10 superseded by i11.
+        # 'interview' active; i4 application A active, no expiry; i5
+        # application C (rejected) active; i6 valid_until yesterday; i7
+        # valid_until today; i8 withdrawn; i9 suggested (ai); i10
+        # superseded by i11.
         # Ruling: i11 is created --as ai so it lands 'suggested' — the
         # pinned sets {i1,i2,i4,i5,i7} / {i1,i3} are exact only when the
         # supersede's successor is not active (the op always creates one).
@@ -178,11 +184,11 @@ class TestWorkingSet(unittest.TestCase):
             self.db, "hat interview rule", "preference", "hat",
             scope_ref_type="hat", scope_ref_text="interview")
         self.i4 = store.instruction(
-            self.db, "thread A rule", "constraint", "application",
-            scope_ref_type="thread", scope_ref=self.tA)
+            self.db, "application A rule", "constraint", "application",
+            scope_ref_type="application", scope_ref=self.aA)
         self.i5 = store.instruction(
-            self.db, "thread C rule", "constraint", "application",
-            scope_ref_type="thread", scope_ref=self.tC)
+            self.db, "application C rule", "constraint", "application",
+            scope_ref_type="application", scope_ref=self.aC)
         self.i6 = store.instruction(
             self.db, "closed yesterday", "preference", "search_wide",
             valid_until=_md(yesterday))
@@ -213,18 +219,18 @@ class TestWorkingSet(unittest.TestCase):
         self.assertEqual({r[0] for r in rows},
                          {self.i1, self.i2, self.i4, self.i5, self.i7})
         # the pinned row shape: (id, kind, scope, body, valid_until) with
-        # scope rendered search_wide / hat:<name> / thread:<id>; ordered
+        # scope rendered search_wide / hat:<name> / application:<id>; ordered
         self.assertEqual(rows[0], (self.i1, "preference", "search_wide",
                                    "directive\tone", None))
         self.assertEqual([r[0] for r in rows],
                          sorted(r[0] for r in rows))
         by_id = {r[0]: r for r in rows}
         self.assertEqual(by_id[self.i2][2], "hat:sourcing")
-        self.assertEqual(by_id[self.i4][2], "thread:%d" % self.tA)
+        self.assertEqual(by_id[self.i4][2], "application:%d" % self.aA)
 
     def test_working_set_other_hat(self):
         # Ruling: the pinned set {i1, i3} is inconsistent with the pinned
-        # query — unfiltered, thread-scoped rows (i4, i5) are in every
+        # query — unfiltered, application-scoped rows (i4, i5) are in every
         # hat's set, as the pinned sourcing set {i1,i2,i4,i5,i7} and the
         # row-5 comment both confirm. The query (Shared behaviors) wins.
         rows = store.working_set(self.db, "interview")
@@ -233,12 +239,12 @@ class TestWorkingSet(unittest.TestCase):
         hat_rows = {r[0] for r in rows if r[2].startswith("hat:")}
         self.assertEqual(hat_rows, {self.i3})
 
-    def test_thread_filter(self):
-        rows = store.working_set(self.db, "sourcing", thread_id=self.tA)
+    def test_application_filter(self):
+        rows = store.working_set(self.db, "sourcing", application_id=self.aA)
         self.assertEqual({r[0] for r in rows},
                          {self.i1, self.i2, self.i4, self.i7})
-        rows = store.working_set(self.db, "sourcing", thread_id=self.tB)
-        # the Review-Focus scope-bleed pin: thread-4's row is ABSENT
+        rows = store.working_set(self.db, "sourcing", application_id=self.aB)
+        # the Review-Focus scope-bleed pin: application A's row is ABSENT
         self.assertEqual({r[0] for r in rows}, {self.i1, self.i2, self.i7})
 
     def test_boundary_today_included(self):
@@ -256,18 +262,20 @@ class TestWorkingSet(unittest.TestCase):
         lines = buf.getvalue().splitlines()
         self.assertEqual(lines[0], "id\tkind\tscope\tbody\tvalid_until")
         # body intact through format_tsv_row (the tab is quoted); row 5
-        # (the dead thread C) is mechanically present in the unfiltered
-        # set — liveness is the drift check's job
+        # (the dead application C) is mechanically present in the
+        # unfiltered set — liveness is the drift check's job
         self.assertEqual(lines[1:], [
             store.format_tsv_row([str(self.i1), "preference", "search_wide",
                                   "directive\tone", ""]),
             store.format_tsv_row([str(self.i2), "preference", "hat:sourcing",
                                   "hat sourcing rule", ""]),
             store.format_tsv_row([str(self.i4), "constraint",
-                                  "thread:%d" % self.tA, "thread A rule",
+                                  "application:%d" % self.aA,
+                                  "application A rule",
                                   ""]),
             store.format_tsv_row([str(self.i5), "constraint",
-                                  "thread:%d" % self.tC, "thread C rule",
+                                  "application:%d" % self.aC,
+                                  "application C rule",
                                   ""]),
             store.format_tsv_row([str(self.i7), "priority", "search_wide",
                                   "closes today",
@@ -282,17 +290,18 @@ class TestWorkingSetDrift(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = pathlib.Path(self.tmp.name) / "t.db"
         self.conn = store.db_connect(self.db)
-        # Threads: live A (submitted), rejected C (submitted, not selected)
+        # Applications: live A (submitted), rejected C (submitted, not
+        # selected)
         for role in ("Role A", "Role C"):
             store.log_event(self.db, "11/10/2026", "Job Application", "Acme",
                             role, "Company Portal", "Application Submitted",
                             "synthetic")
         store.log_event(self.db, "11/15/2026", "Follow-up", "Acme", "Role C",
                         "Email", "Not Selected", "synthetic")
-        self.tA = self.conn.execute(
-            "SELECT id FROM threads WHERE role = 'Role A'").fetchone()[0]
-        self.tC = self.conn.execute(
-            "SELECT id FROM threads WHERE role = 'Role C'").fetchone()[0]
+        self.aA = self.conn.execute(
+            "SELECT id FROM application WHERE role = 'Role A'").fetchone()[0]
+        self.aC = self.conn.execute(
+            "SELECT id FROM application WHERE role = 'Role C'").fetchone()[0]
         # hat 'sourcing': the OLDER row carries X's body (not flaggable);
         # the LATEST row carries Y's body verbatim but case-shifted, and a
         # REPHRASED occurrence of Z's body (not a substring)
@@ -308,14 +317,14 @@ class TestWorkingSetDrift(unittest.TestCase):
         self.iX = store.instruction(self.db, "old directive text",
                                     "preference", "search_wide")
         self.iDead = store.instruction(
-            self.db, "dead thread rule", "constraint", "application",
-            scope_ref_type="thread", scope_ref=self.tC)
+            self.db, "dead application rule", "constraint", "application",
+            scope_ref_type="application", scope_ref=self.aC)
         self.iGone = store.instruction(
-            self.db, "missing thread rule", "constraint", "application",
-            scope_ref_type="thread", scope_ref=999)
+            self.db, "missing application rule", "constraint",
+            "application", scope_ref_type="application", scope_ref=999)
         self.iLive = store.instruction(
-            self.db, "live thread rule", "constraint", "application",
-            scope_ref_type="thread", scope_ref=self.tA)
+            self.db, "live application rule", "constraint", "application",
+            scope_ref_type="application", scope_ref=self.aA)
         self.yesterday = (datetime.date.today()
                           - datetime.timedelta(days=1)).isoformat()
         self.iExp = store.instruction(self.db, "closes soon", "priority",
@@ -346,10 +355,10 @@ class TestWorkingSetDrift(unittest.TestCase):
         findings = store.working_set_drift(self.db)
         dead = [f for f in findings if f.startswith("dead scope:")]
         self.assertEqual(dead, [
-            "dead scope: instruction %d (thread Acme / Role C is rejected)"
+            "dead scope: instruction %d (application Acme / Role C is rejected)"
             % self.iDead,
-            "dead scope: instruction %d (thread 999 is gone)" % self.iGone,
-        ])  # the live thread's instruction is clean
+            "dead scope: instruction %d (application 999 is gone)" % self.iGone,
+        ])  # the live application's instruction is clean
 
     def test_expired_flipped_and_reported(self):
         findings = store.working_set_drift(self.db)

@@ -81,16 +81,23 @@ class TestSchema(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_existing_tables_unchanged(self):
+    def test_fresh_db_operational_columns(self):
+        # The operational layer is re-keyed: a fresh db has the new
+        # application-keyed event table, the application entity, and meta /
+        # run_logs — and never carries the legacy events/threads model.
         conn = store.db_connect(self.db)
         try:
-            self.assertEqual(_columns(conn, "events"),
-                             {"id", "date", "date_iso", "type", "company", "role",
-                              "channel", "outcome", "note", "raw_row"})
+            names = _table_names(conn)
+            self.assertNotIn("events", names)
+            self.assertNotIn("threads", names)
+            self.assertEqual(_columns(conn, "event"),
+                             {"id", "date", "date_iso", "type", "application_id",
+                              "company_key", "role", "channel", "outcome",
+                              "note", "raw_row", "created_at"})
+            self.assertEqual(_columns(conn, "application"),
+                             {"id", "company_id", "job_opening_id", "role",
+                              "contact_id", "applied_date", "created_at"})
             self.assertEqual(_columns(conn, "meta"), {"key", "value"})
-            self.assertEqual(_columns(conn, "threads"),
-                             {"id", "company", "role", "req", "status",
-                              "status_date", "status_date_iso", "last_event_id"})
             self.assertEqual(_columns(conn, "run_logs"),
                              {"id", "hat", "date", "date_iso", "task", "action",
                               "decision", "next", "raw_row"})

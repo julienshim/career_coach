@@ -2,8 +2,8 @@
 """The career store — the system of record for the data layer.
 
 The store holds the structured state of the job search: events (the ledger),
-thread state (derived from events, never hand-set), and hat run logs. The
-markdown narrative layer stays in the files; this is the data layer.
+application status (derived from events, never hand-set), and hat run logs.
+The markdown narrative layer stays in the files; this is the data layer.
 
 User-agnostic mechanism tooling: the db path is always passed in (--db); no
 user path is hardcoded here. The ops are the only writer. Events are
@@ -23,32 +23,9 @@ import sys
 import tempfile
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS events (
-  id        INTEGER PRIMARY KEY,        -- insertion order; the export is date-ordered (id breaks same-day ties)
-  date      TEXT NOT NULL,              -- as recorded, e.g. '3/1/2026'
-  date_iso  TEXT NOT NULL,              -- '2026-03-01' (range queries, benefit-claim week logic)
-  type      TEXT NOT NULL,              -- the Activity Type value, as recorded
-  company   TEXT NOT NULL,              -- raw Company/Contact value, as recorded
-  role      TEXT NOT NULL,
-  channel   TEXT NOT NULL,              -- the Method value, as recorded
-  outcome   TEXT NOT NULL,              -- the Stage/Outcome value, as recorded
-  note      TEXT NOT NULL,              -- third-party-safe (the standards contract); carries the link
-  raw_row   TEXT NOT NULL               -- exact original line; the export reproduces it verbatim
-);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,               -- 'ledger_header', 'log_header:<hat>'
   value TEXT NOT NULL                   -- the file's exact header line
-);
-CREATE TABLE IF NOT EXISTS threads (
-  id              INTEGER PRIMARY KEY,
-  company         TEXT NOT NULL,        -- company key: the Company/Contact value before ' / '
-  role            TEXT NOT NULL,
-  req             TEXT,                 -- first 'req #?digits' found in a thread note, if any
-  status          TEXT NOT NULL,        -- submitted | advanced | rejected | closed | paused
-  status_date     TEXT NOT NULL,        -- as-recorded date of the event that set the status
-  status_date_iso TEXT NOT NULL,
-  last_event_id   INTEGER REFERENCES events(id),
-  UNIQUE(company, role)
 );
 CREATE TABLE IF NOT EXISTS run_logs (
   id       INTEGER PRIMARY KEY,
@@ -61,13 +38,15 @@ CREATE TABLE IF NOT EXISTS run_logs (
   next     TEXT NOT NULL,
   raw_row  TEXT NOT NULL                -- exact original line; the export reproduces it verbatim
 );
--- Knowledge layer: additive tables; a pre-existing db upgrades by being
--- opened (IF NOT EXISTS). The existing events/threads/run_logs tables are
--- untouched (their re-model is a planned later step). The instruction table
--- carries two deltas from the original design: scope_ref_text (a non-id
--- scope target: a hat name or stage label) and the 'suggested' status (an
--- agent-suggested directive, not in force until the user's
--- verify-instruction).
+-- The knowledge layer is additive: a pre-existing db upgrades by being
+-- opened (IF NOT EXISTS); run_logs and meta carry forward unchanged. The
+-- operational layer is re-modeled on the same tables: event (the ledger,
+-- keyed on application.id, defined after the application table) and the
+-- v_application_status view (derived, rebuilt on every open). The
+-- instruction table carries two deltas from the original design:
+-- scope_ref_text (a non-id scope target: a hat name or stage label) and the
+-- 'suggested' status (an agent-suggested directive, not in force until the
+-- user's verify-instruction).
 CREATE TABLE IF NOT EXISTS person (
   id            INTEGER PRIMARY KEY,
   full_name     TEXT NOT NULL,
@@ -228,6 +207,20 @@ CREATE TABLE IF NOT EXISTS note_reference (
   target_id     INTEGER NOT NULL,
   PRIMARY KEY (note_id, target_type, target_id)
 );
+CREATE TABLE IF NOT EXISTS event (
+  id            INTEGER PRIMARY KEY,   -- insertion order = ledger row number
+  date          TEXT NOT NULL,         -- as recorded
+  date_iso      TEXT NOT NULL,         -- ISO (range queries)
+  type          TEXT NOT NULL,
+  application_id INTEGER REFERENCES application(id),
+  company_key   TEXT NOT NULL,         -- company key as logged (denormalized for third-party-safe export)
+  role          TEXT NOT NULL,
+  channel       TEXT NOT NULL,
+  outcome       TEXT NOT NULL,         -- the flip-table vocabulary
+  note          TEXT NOT NULL,         -- third-party-safe (write-time PII guard)
+  raw_row       TEXT NOT NULL,         -- exact original line; exports reproduce verbatim
+  created_at    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS achievement_skill (
   id            INTEGER PRIMARY KEY,
   achievement_id INTEGER NOT NULL REFERENCES achievement(id),
@@ -330,7 +323,7 @@ CREATE TABLE IF NOT EXISTS instruction (
   body           TEXT NOT NULL,         -- the directive as stated (its purpose, not a rule of its own)
   kind           TEXT NOT NULL,         -- priority / preference / constraint / prohibition
   scope_type     TEXT NOT NULL,         -- task / application / company / interview_stage / search_wide / hat
-  scope_ref_type TEXT,                  -- the table scope_ref points at: thread / application / company / interview / hat
+  scope_ref_type TEXT,                  -- the table scope_ref points at: application / company / interview / hat
   scope_ref      INTEGER,               -- the id of the scoped entity; NULL for task / search_wide / hat
   scope_ref_text TEXT,                  -- a non-id scope target: a hat name or a stage label
   stated_date    TEXT NOT NULL,         -- when the user stated it (ISO)
@@ -343,8 +336,8 @@ CREATE TABLE IF NOT EXISTS instruction (
 """
 
 
-# The flip table: outcome -> thread status. None = the event has no thread
-# effect (outreach, profile updates, internal work, claims). Complete against
+# The flip table: outcome -> application status. None = the event sets no
+# status (outreach, profile updates, internal work, claims). Complete against
 # the ledger's outcome vocabulary; anything else is refused, never guessed.
 FLIP = {
     "Application Submitted": "submitted",
@@ -373,6 +366,37 @@ FLIP = {
     "Other": None,
 }
 
+def _status_view_sql():
+    """The v_application_status view, generated from FLIP (the single source
+    of truth for the flip table). Last status-setting event in
+    (date_iso, id) order — the v1 ordering, exactly as the legacy
+    derivation ran it."""
+    cases, setting = [], []
+    for outcome, st in FLIP.items():
+        if st is None:
+            continue
+        esc = outcome.replace("'", "''")
+        cases.append("    WHEN '%s' THEN '%s'" % (esc, st))
+        setting.append("'%s'" % esc)
+    return (
+        "CREATE VIEW v_application_status AS "
+        "SELECT a.id AS application_id, c.name AS company, a.role, "
+        "e.outcome AS last_outcome, e.date_iso AS status_date, "
+        "e.id AS last_event_id, "
+        "CASE e.outcome\n" + "\n".join(cases) + "\n  END AS status "
+        "FROM application a "
+        "JOIN company c ON c.id = a.company_id "
+        "LEFT JOIN event e ON e.application_id = a.id "
+        "AND e.id = (SELECT e2.id FROM event e2 "
+        "WHERE e2.application_id = a.id "
+        "AND e2.outcome IN (" + ", ".join(setting) + ") "
+        # both DESC: the last event in (date_iso, id) order. A bare
+        # 'date_iso, id DESC' would sort the date ASC — the DESC binds to
+        # the last term only.
+        "ORDER BY e2.date_iso DESC, e2.id DESC LIMIT 1)"
+    )
+
+
 REQ_RE = re.compile(r"req #?(\d+)")
 
 
@@ -391,6 +415,11 @@ def db_connect(db_path):
     conn = sqlite3.connect(str(p))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    # the view is derived state — rebuilt on every open, the rebuild pattern
+    # for derived state; generated from FLIP so the flip table stays
+    # single-sourced
+    conn.execute("DROP VIEW IF EXISTS v_application_status")
+    conn.execute(_status_view_sql())
     return conn
 
 
@@ -509,47 +538,18 @@ def write_atomic(out_path, data):
         raise
 
 
-def build_threads(conn):
-    """Derive thread state from events (never hand-set).
-
-    One thread per (company key, role). Only status-setting events (FLIP !=
-    None) with a real company and role create or update threads. The status
-    is the FLIP of the latest such event in (date_iso, id) order; the req is
-    the first 'req #?digits' found in a thread note, if any. Returns the
-    thread count.
-    """
-    conn.execute("DELETE FROM threads")  # derived state: rebuilt, never edited
-    events = conn.execute(
-        "SELECT id, date, date_iso, company, role, outcome, note "
-        "FROM events ORDER BY date_iso, id"
-    ).fetchall()
-    threads = {}
-    for eid, date, d_iso, company, role, outcome, note in events:
-        if outcome not in FLIP:
-            raise ValueError("unknown outcome %r (event %d)" % (outcome, eid))
-        if FLIP[outcome] is None or company == "n/a" or role == "n/a":
-            continue
-        key = (company_key(company), role)
-        m = REQ_RE.search(note)
-        req = m.group(1) if m else None
-        t = threads.get(key)
-        if t is None:
-            threads[key] = [FLIP[outcome], date, d_iso, eid, req]
-        else:
-            t[0] = FLIP[outcome]
-            t[1] = date
-            t[2] = d_iso
-            t[3] = eid
-            if t[4] is None and req is not None:
-                t[4] = req
-    for (company, role), (status, date, d_iso, eid, req) in threads.items():
-        conn.execute(
-            "INSERT INTO threads "
-            "(company, role, req, status, status_date, status_date_iso, last_event_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (company, role, req, status, date, d_iso, eid),
-        )
-    return len(threads)
+def _resolve_application(conn, company_raw, role):
+    """Create-or-reuse the application for (company key, role) — the v1
+    thread-creation behavior, on the entity. company_raw is the value as
+    recorded (it may carry a ' / ' contact part); the key is computed here,
+    so an already-keyed value passes through unchanged. Returns the
+    application id, or None for the n/a pairs (they have no application)."""
+    key = company_key(company_raw)
+    if key == "n/a" or role == "n/a":
+        return None
+    cid = _upsert(conn, "company", {"name": key}, {}, {})
+    return _upsert(conn, "application", {"company_id": cid, "role": role},
+                   {}, {}, stamps=("created_at",))
 
 
 LOG_HEADER = "Date\tTask\tAction\tDecision\tNext"
@@ -560,13 +560,15 @@ def migrate(db_path, ledger_path, logs_dir=None):
     out. Fails closed (unknown shape, unknown outcome, malformed date —
     nothing is written when it raises) and refuses a non-empty db. Headers
     are captured into meta; every row is stored with its exact raw line so
-    exports are byte-stable. A 4-field log row (missing trailing empty Next)
-    is padded with next=''; any other shape fails.
-    Returns {"events": int, "threads": int, "run_logs": int}.
+    exports are byte-stable. Status-setting rows create-or-reuse the
+    application for (company key, role), in first-status-event order (the
+    v1 thread order). A 4-field log row (missing trailing empty Next) is
+    padded with next=''; any other shape fails.
+    Returns {"events": int, "applications": int, "run_logs": int}.
     """
     conn = db_connect(db_path)
     try:
-        n = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        n = conn.execute("SELECT COUNT(*) FROM event").fetchone()[0]
         if n:
             raise ValueError("refusing to migrate into a non-empty db (%d events)" % n)
         with conn:  # one transaction: all or nothing
@@ -586,13 +588,16 @@ def migrate(db_path, ledger_path, logs_dir=None):
                     raise ValueError(
                         "unknown outcome %r (row: %r)" % (outcome, raw[:80])
                     )
+                app_id = _resolve_application(conn, company, role) \
+                    if FLIP[outcome] is not None else None
                 conn.execute(
-                    "INSERT INTO events "
-                    "(date, date_iso, type, company, role, channel, outcome, note, raw_row) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (date, to_iso(date), etype, company, role, channel, outcome, note, raw),
+                    "INSERT INTO event "
+                    "(date, date_iso, type, application_id, company_key, "
+                    "role, channel, outcome, note, raw_row, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (date, to_iso(date), etype, app_id, company_key(company),
+                     role, channel, outcome, note, raw, _today_iso()),
                 )
-            build_threads(conn)
             if logs_dir is not None:
                 for log_path in sorted(pathlib.Path(logs_dir).glob("*.tsv")):
                     hat = log_path.stem
@@ -619,11 +624,94 @@ def migrate(db_path, ledger_path, logs_dir=None):
                             (hat, ldate, to_iso(ldate), task, action, decision, nxt, raw),
                         )
         counts = {
-            "events": conn.execute("SELECT COUNT(*) FROM events").fetchone()[0],
-            "threads": conn.execute("SELECT COUNT(*) FROM threads").fetchone()[0],
-            "run_logs": conn.execute("SELECT COUNT(*) FROM run_logs").fetchone()[0],
+            "events": conn.execute("SELECT COUNT(*) FROM event").fetchone()[0],
+            "applications": conn.execute(
+                "SELECT COUNT(*) FROM application").fetchone()[0],
+            "run_logs": conn.execute(
+                "SELECT COUNT(*) FROM run_logs").fetchone()[0],
         }
         return counts
+    finally:
+        conn.close()
+
+
+def migrate_applications(db_path):
+    """One-shot upgrade for a pre-Phase-2 db: the legacy event rows are
+    copied onto the new event table keyed on application (ids preserved —
+    insertion order is the ledger row number), the application rows are
+    created for the legacy thread set, the thread-scoped instructions are
+    remapped to the new application ids (scope_ref_type renamed to
+    'application'), and the legacy tables are dropped — after the ledger's
+    raw rows are verified byte-identical between the two tables. One
+    transaction; nothing is written on refusal. Refuses a non-empty new
+    event table; a clean no-op when the legacy tables are absent. Returns
+    {"applications", "events", "instructions_remapped", "dropped"}."""
+    conn = db_connect(db_path)
+    try:
+        has_legacy = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'events'").fetchone()
+        n_legacy = conn.execute(
+            "SELECT COUNT(*) FROM events").fetchone()[0] if has_legacy else 0
+        # No legacy data to migrate (no legacy tables at all, or empty
+        # ones — a fresh db still carries the empty legacy tables until
+        # their DDL leaves the schema): a no-op, nothing dropped, so the
+        # op's result is the same either way.
+        if has_legacy is None or n_legacy == 0:
+            return {"applications": 0, "events": 0,
+                    "instructions_remapped": 0, "dropped": []}
+        n_new = conn.execute("SELECT COUNT(*) FROM event").fetchone()[0]
+        if n_new:
+            raise ValueError(
+                "refusing to migrate: the new event table already holds %d "
+                "row(s)" % n_new)
+        with conn:  # one transaction: all or nothing
+            threads = conn.execute(
+                "SELECT id, company, role FROM threads ORDER BY id"
+            ).fetchall()
+            mapping, pair_map = {}, {}
+            for tid, company, role in threads:
+                app_id = _resolve_application(conn, company, role)
+                mapping[tid] = app_id
+                pair_map[(company_key(company), role)] = app_id
+            events = conn.execute(
+                "SELECT id, date, date_iso, type, company, role, channel, "
+                "outcome, note, raw_row FROM events ORDER BY id").fetchall()
+            for (eid, date, d_iso, etype, company, role, channel, outcome,
+                 note, raw) in events:
+                key = company_key(company)
+                conn.execute(
+                    "INSERT INTO event (id, date, date_iso, type, "
+                    "application_id, company_key, role, channel, outcome, "
+                    "note, raw_row, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (eid, date, d_iso, etype,
+                     pair_map.get((key, role)), key, role, channel,
+                     outcome, note, raw, _today_iso()))
+            remapped = 0
+            for tid, app_id in mapping.items():
+                cur = conn.execute(
+                    "UPDATE instruction SET scope_ref = ?, "
+                    "scope_ref_type = 'application', updated_at = ? "
+                    "WHERE scope_ref_type = 'thread' AND scope_ref = ?",
+                    (app_id, _today_iso(), tid))
+                remapped += cur.rowcount
+            old_rows = [r[0] for r in conn.execute(
+                "SELECT raw_row FROM events ORDER BY date_iso, id")]
+            new_rows = [r[0] for r in conn.execute(
+                "SELECT raw_row FROM event ORDER BY date_iso, id")]
+            if old_rows != new_rows:
+                raise ValueError(
+                    "refusing to drop the legacy tables: the ledger's raw "
+                    "rows are not byte-identical between the two tables")
+            conn.execute("DROP TABLE threads")
+            conn.execute("DROP TABLE events")
+            return {
+                "applications": len(mapping),
+                "events": len(events),
+                "instructions_remapped": remapped,
+                "dropped": ["threads", "events"],
+            }
     finally:
         conn.close()
 
@@ -640,7 +728,7 @@ def export_ledger(db_path, out_path):
         rows = [
             r[0]
             for r in conn.execute(
-                "SELECT raw_row FROM events ORDER BY date_iso, id"
+                "SELECT raw_row FROM event ORDER BY date_iso, id"
             ).fetchall()
         ]
     finally:
@@ -650,10 +738,11 @@ def export_ledger(db_path, out_path):
 
 
 def log_event(db_path, date, etype, company, role, channel, outcome, note):
-    """Append an event and, when the outcome sets a status, flip its thread —
-    one transaction, one op. Refuses PII patterns in the note, unknown
-    outcomes, and malformed dates; nothing is written when it refuses.
-    Returns the new event id.
+    """Append an event and, when the outcome sets a status, create-or-reuse
+    the application for (company key, role) — one transaction, one op. The
+    validations run before any write: a refusal (a PII pattern in the note,
+    an unknown outcome, a malformed date) leaves nothing behind, no
+    application/company side effects included. Returns the new event id.
     """
     to_iso(date)
     if outcome not in FLIP:
@@ -662,31 +751,21 @@ def log_event(db_path, date, etype, company, role, channel, outcome, note):
     conn = db_connect(db_path)
     try:
         with conn:
+            app_id = None
+            if FLIP[outcome] is not None:
+                app_id = _resolve_application(conn, company, role)
             cur = conn.execute(
-                "INSERT INTO events "
-                "(date, date_iso, type, company, role, channel, outcome, note, raw_row) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (date, to_iso(date), etype, company, role, channel, outcome, note,
-                 format_tsv_row([date, etype, company, role, channel, outcome, note])),
+                "INSERT INTO event "
+                "(date, date_iso, type, application_id, company_key, role, "
+                "channel, outcome, note, raw_row, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (date, to_iso(date), etype, app_id, company_key(company),
+                 role, channel, outcome, note,
+                 format_tsv_row([date, etype, company, role, channel,
+                                 outcome, note]),
+                 _today_iso()),
             )
-            eid = cur.lastrowid
-            st = FLIP[outcome]
-            if st is not None and company != "n/a" and role != "n/a":
-                m = REQ_RE.search(note)
-                conn.execute(
-                    "INSERT INTO threads "
-                    "(company, role, req, status, status_date, status_date_iso, last_event_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT(company, role) DO UPDATE SET "
-                    "status = excluded.status, "
-                    "status_date = excluded.status_date, "
-                    "status_date_iso = excluded.status_date_iso, "
-                    "last_event_id = excluded.last_event_id, "
-                    "req = COALESCE(threads.req, excluded.req)",
-                    (company_key(company), role, m.group(1) if m else None,
-                     st, date, to_iso(date), eid),
-                )
-        return eid
+            return cur.lastrowid
     finally:
         conn.close()
 
@@ -783,34 +862,36 @@ def _names_match(key, name):
 
 
 def divergence(db_path, qa_path, cast_path, hubs_dir=None):
-    """Check the markdown state files against thread state. Returns drift
-    descriptions (empty = clean); the CLI exits non-zero on drift.
+    """Check the markdown state files against application state (the derived
+    status view). Returns drift descriptions (empty = clean); the CLI exits
+    non-zero on drift.
 
     v1 checks:
       1. QA presence — every company with >=1 Application Submitted event has
          a '## ' section naming it in the QA file.
-      2. Hub recency — for each advanced thread whose company has
+      2. Hub recency — for each advanced application whose company has
          <hubs>/<company>/README.md, the hub's '**Live state (M/D/YYYY)**'
-         date >= the thread's status date. A missing hub is not drift (a
-         round may not be live yet); a stale or malformed hub is.
-      3. Cast naming — every advanced/rejected/closed thread's company is
-         named in the cast file.
+         date >= the application's status date. A missing hub is not drift
+         (a round may not be live yet); a stale or malformed hub is.
+      3. Cast naming — every advanced/rejected/closed application's company
+         is named in the cast file.
      A naming match is bidirectional and case-insensitive: a section or
      line's company part names a store key when either contains the other
      — naming drift is not drift, a company sharing no name at all is.
     """
     conn = db_connect(db_path)
     try:
-        threads = conn.execute(
-            "SELECT company, role, status, status_date, status_date_iso "
-            "FROM threads ORDER BY id"
+        apps = conn.execute(
+            "SELECT company, role, status, status_date, last_event_id "
+            "FROM v_application_status ORDER BY application_id"
         ).fetchall()
-        applied = set()
-        for (c,) in conn.execute(
-            "SELECT company FROM events WHERE outcome = 'Application Submitted'"
-        ).fetchall():
-            if c != "n/a":
-                applied.add(company_key(c))
+        dates = dict(conn.execute("SELECT id, date FROM event").fetchall())
+        applied = {
+            c for (c,) in conn.execute(
+                "SELECT company_key FROM event "
+                "WHERE outcome = 'Application Submitted' "
+                "AND company_key != 'n/a'")
+        }
     finally:
         conn.close()
 
@@ -824,12 +905,12 @@ def divergence(db_path, qa_path, cast_path, hubs_dir=None):
         if not any(_names_match(comp, s) for s in sections):
             drift.append("qa: no '## ' section naming %r" % (comp,))
 
-    # 3. Cast naming (per company: one naming covers all of its threads)
+    # 3. Cast naming (per company: one naming covers all of its applications)
     cast_names = [_company_part(ln[2:])
                   for ln in _read_text(cast_path).split("\n")
                   if ln.startswith("- ")]
     cast_targets = sorted({
-        company for company, _role, st, _sd, _sd_iso in threads
+        company for company, _role, st, _sd_iso, _le in apps
         if st in ("advanced", "rejected", "closed")
     })
     for company in cast_targets:
@@ -839,7 +920,7 @@ def divergence(db_path, qa_path, cast_path, hubs_dir=None):
     # 2. Hub recency
     if hubs_dir is not None:
         hubs_dir = pathlib.Path(hubs_dir)
-        for company, role, st, sd, sd_iso in threads:
+        for company, role, st, sd_iso, le in apps:
             if st != "advanced":
                 continue
             readme = hubs_dir / company / "README.md"
@@ -854,7 +935,7 @@ def divergence(db_path, qa_path, cast_path, hubs_dir=None):
             if to_iso(m.group(1)) < sd_iso:
                 drift.append(
                     "hub: %s hub dated %s is older than %s status date %s"
-                    % (company, m.group(1), role, sd)
+                    % (company, m.group(1), role, dates.get(le))
                 )
     return drift
 
@@ -869,15 +950,15 @@ def export_claim(db_path, date_from, date_to, out_path=None):
     conn = db_connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT date, company, role, type FROM events "
+            "SELECT date, company_key, role, type FROM event "
             "WHERE date_iso >= ? AND date_iso <= ? ORDER BY date_iso, id",
             (d1, d2),
         ).fetchall()
     finally:
         conn.close()
     lines = [
-        "%s  %s  %s  [%s]" % (date, company_key(company), role, etype)
-        for date, company, role, etype in rows
+        "%s  %s  %s  [%s]" % (date, key, role, etype)
+        for date, key, role, etype in rows
     ]
     text = ("\n".join(lines) + "\n") if lines else ""
     if out_path is not None:
@@ -886,22 +967,41 @@ def export_claim(db_path, date_from, date_to, out_path=None):
 
 
 def status(db_path, company=None, live=False):
-    """Thread states: (company, role, status, status_date, req, last_event_id)
-    in thread order. --live excludes rejected/closed."""
+    """Application states: (company, role, status, status_date, req,
+    last_event_id) in application-id order. The status is derived (the view
+    over the application's events); status_date is the as-recorded date of
+    the last status-setting event (None when it has none); req is the first
+    'req #?digits' among the application's status-setting events in
+    (date_iso, id) order (the v1 derivation). --live excludes rejected/
+    closed; a NULL status passes --live."""
     conn = db_connect(db_path)
     try:
-        sql = ("SELECT company, role, status, status_date, req, last_event_id "
-               "FROM threads")
-        where, args = [], []
-        if company:
-            where.append("company = ?")
-            args.append(company)
-        if live:
-            where.append("status NOT IN ('rejected', 'closed')")
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY id"
-        return conn.execute(sql, args).fetchall()
+        rows = conn.execute(
+            "SELECT application_id, company, role, status, last_event_id "
+            "FROM v_application_status ORDER BY application_id"
+        ).fetchall()
+        dates = dict(conn.execute("SELECT id, date FROM event").fetchall())
+        setting = ",".join(
+            "'%s'" % o.replace("'", "''")
+            for o, st in FLIP.items() if st is not None)
+        reqs = {}
+        for aid, note in conn.execute(
+                "SELECT application_id, note FROM event "
+                "WHERE outcome IN (%s) AND application_id IS NOT NULL "
+                "ORDER BY application_id, date_iso, id" % setting):
+            if aid in reqs:
+                continue
+            m = REQ_RE.search(note)
+            if m:
+                reqs[aid] = m.group(1)
+        out = []
+        for aid, comp, role, st, le in rows:
+            if company and comp != company:
+                continue
+            if live and st in ("rejected", "closed"):
+                continue
+            out.append((comp, role, st, dates.get(le), reqs.get(aid), le))
+        return out
     finally:
         conn.close()
 
@@ -912,17 +1012,223 @@ def caps(db_path, company=None):
     conn = db_connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT company FROM events WHERE outcome = 'Application Submitted'"
+            "SELECT company_key FROM event "
+            "WHERE outcome = 'Application Submitted'"
         ).fetchall()
     finally:
         conn.close()
     counts = {}
-    for (c,) in rows:
-        k = company_key(c)
+    for (k,) in rows:
         counts[k] = counts.get(k, 0) + 1
     if company:
         counts = {k: v for k, v in counts.items() if k == company}
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+# ---- Operational entity ops (Phase 2) --------------------------------------
+# Ungoverned (the shipped DDL carries no provenance columns); M/D/YYYY
+# inputs are stored ISO; target companies / contacts must already exist
+# (the ledger's vocabulary is the source of target companies — only
+# log-event and the migrations auto-create).
+
+JOB_OPENING_STATUSES = ("open", "applied", "closed")
+INTERVIEW_KINDS = ("recruiter", "technical", "system", "onsite", "ai_voice")
+INTERVIEW_STATUSES = ("pending", "scheduled", "held", "passed", "failed")
+INTERACTION_KINDS = ("email", "call", "meet", "post")
+INTERACTION_DIRECTIONS = ("in", "out")
+
+
+def _company_id_or_refuse(conn, company):
+    """Resolve a company by exact name; refuse (naming the missing name)
+    when it does not exist."""
+    row = conn.execute(
+        "SELECT id FROM company WHERE name = ?", (company,)).fetchone()
+    if row is None:
+        raise ValueError("no company named %r" % (company,))
+    return row[0]
+
+
+def _contact_id_or_refuse(conn, contact):
+    row = conn.execute(
+        "SELECT id FROM contact WHERE name = ?", (contact,)).fetchone()
+    if row is None:
+        raise ValueError("no contact named %r" % (contact,))
+    return row[0]
+
+
+def upsert_contact(db_path, name, title=None, company=None, email=None,
+                   linkedin_ref=None, how_met=None):
+    """Create-or-verify a contact row keyed by name (exact). `company` is
+    by name and must exist. Returns the row id."""
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            provided = {"name": name}
+            for col, val in (("title", title), ("email", email),
+                             ("linkedin_ref", linkedin_ref),
+                             ("how_met", how_met)):
+                if val is not None:
+                    provided[col] = val
+            if company is not None:
+                provided["company_id"] = _company_id_or_refuse(conn, company)
+            return _upsert(conn, "contact", {"name": name}, provided, {})
+    finally:
+        conn.close()
+
+
+def upsert_job_opening(db_path, company, title, location=None, work_mode=None,
+                       source=None, url=None, posted_date=None,
+                       posted_comp=None, jd_ref=None, status=None):
+    """Create-or-verify a job opening keyed by (company, title). The company
+    must exist. status is enum-validated (open / applied / closed), default
+    'open'. posted_date is M/D/YYYY as stated, stored ISO. Returns the row
+    id."""
+    if status is not None and status not in JOB_OPENING_STATUSES:
+        raise ValueError("bad status %r (want one of: %s)"
+                         % (status, ", ".join(JOB_OPENING_STATUSES)))
+    if posted_date is not None:
+        posted_date = to_iso(posted_date)
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            cid = _company_id_or_refuse(conn, company)
+            provided = {"company_id": cid, "title": title}
+            for col, val in (("location", location), ("work_mode", work_mode),
+                             ("source", source), ("url", url),
+                             ("posted_date", posted_date),
+                             ("posted_comp", posted_comp),
+                             ("jd_ref", jd_ref), ("status", status)):
+                if val is not None:
+                    provided[col] = val
+            return _upsert(conn, "job_opening",
+                           {"company_id": cid, "title": title}, provided,
+                           {"status": "open"})
+    finally:
+        conn.close()
+
+
+def upsert_application(db_path, company, role, job_opening_id=None,
+                       contact=None, applied_date=None):
+    """Create-or-verify an application keyed by (company, role) — the same
+    key the ledger path uses, so a typed call reuses the application a
+    status-setting event created. The company (and `contact`, by name)
+    must exist. Stored NULLs (job_opening_id, contact_id, applied_date)
+    may be filled by a re-run. Returns the row id."""
+    if applied_date is not None:
+        applied_date = to_iso(applied_date)
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            cid = _company_id_or_refuse(conn, company)
+            provided = {"company_id": cid, "role": role}
+            if job_opening_id is not None:
+                provided["job_opening_id"] = job_opening_id
+            if contact is not None:
+                provided["contact_id"] = _contact_id_or_refuse(conn, contact)
+            if applied_date is not None:
+                provided["applied_date"] = applied_date
+            return _upsert(conn, "application",
+                           {"company_id": cid, "role": role}, provided, {},
+                           stamps=("created_at",))
+    finally:
+        conn.close()
+
+
+def interview(db_path, application_id, round, kind=None, scheduled_at=None,
+              status=None, feedback_ref=None):
+    """Create-or-verify an interview row keyed by (application_id, round).
+    The application must exist. kind is enum-validated; status is
+    enum-validated with default 'pending' and provided at creation only —
+    a later call providing a different status is a conflict refusal (the
+    lifecycle mutation is set-interview). scheduled_at is M/D/YYYY as
+    stated, stored ISO. Returns the row id."""
+    if kind is not None and kind not in INTERVIEW_KINDS:
+        raise ValueError("bad kind %r (want one of: %s)"
+                         % (kind, ", ".join(INTERVIEW_KINDS)))
+    if status is not None and status not in INTERVIEW_STATUSES:
+        raise ValueError("bad status %r (want one of: %s)"
+                         % (status, ", ".join(INTERVIEW_STATUSES)))
+    if scheduled_at is not None:
+        scheduled_at = to_iso(scheduled_at)
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            app = conn.execute(
+                "SELECT id FROM application WHERE id = ?",
+                (application_id,)).fetchone()
+            if app is None:
+                raise ValueError("no application with id %d" % (application_id,))
+            provided = {"application_id": application_id, "round": round}
+            for col, val in (("kind", kind), ("scheduled_at", scheduled_at),
+                             ("status", status),
+                             ("feedback_ref", feedback_ref)):
+                if val is not None:
+                    provided[col] = val
+            return _upsert(conn, "interview",
+                           {"application_id": application_id, "round": round},
+                           provided, {"status": "pending"})
+    finally:
+        conn.close()
+
+
+def set_interview(db_path, row_id, status):
+    """The only interview status mutation. Enum-validated; refuses a
+    missing row."""
+    if status not in INTERVIEW_STATUSES:
+        raise ValueError("bad status %r (want one of: %s)"
+                         % (status, ", ".join(INTERVIEW_STATUSES)))
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            row = conn.execute(
+                "SELECT status FROM interview WHERE id = ?",
+                (row_id,)).fetchone()
+            if row is None:
+                raise ValueError("no interview with id %d" % (row_id,))
+            conn.execute(
+                "UPDATE interview SET status = ?, updated_at = ? "
+                "WHERE id = ?", (status, _today_iso(), row_id))
+    finally:
+        conn.close()
+
+
+def add_interaction(db_path, kind, direction, occurred_at, contact=None,
+                    company=None, application_id=None, summary=None):
+    """Insert an interaction row (insert-only — the table has no
+    updated_at and no natural key). kind is email / call / meet / post,
+    direction in / out; the targets (contact by name, company by name,
+    application by id) must exist. occurred_at is M/D/YYYY as stated,
+    stored ISO. Returns the row id."""
+    if kind not in INTERACTION_KINDS:
+        raise ValueError("bad kind %r (want one of: %s)"
+                         % (kind, ", ".join(INTERACTION_KINDS)))
+    if direction not in INTERACTION_DIRECTIONS:
+        raise ValueError("bad direction %r (want one of: %s)"
+                         % (direction, ", ".join(INTERACTION_DIRECTIONS)))
+    occurred_at = to_iso(occurred_at)
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            contact_id = (_contact_id_or_refuse(conn, contact)
+                          if contact is not None else None)
+            company_id = (_company_id_or_refuse(conn, company)
+                          if company is not None else None)
+            if application_id is not None:
+                app = conn.execute(
+                    "SELECT id FROM application WHERE id = ?",
+                    (application_id,)).fetchone()
+                if app is None:
+                    raise ValueError(
+                        "no application with id %d" % (application_id,))
+            cur = conn.execute(
+                "INSERT INTO interaction (kind, direction, occurred_at, "
+                "contact_id, company_id, application_id, summary, "
+                "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (kind, direction, occurred_at, contact_id, company_id,
+                 application_id, summary, _today_iso()))
+            return cur.lastrowid
+    finally:
+        conn.close()
 
 
 # ---- Phase-1 knowledge layer ops -------------------------------------------
@@ -1027,21 +1333,23 @@ def _today_iso():
     return datetime.date.today().isoformat()
 
 
-def _upsert(conn, table, key_where, provided, defaults):
+def _upsert(conn, table, key_where, provided, defaults,
+            stamps=("created_at", "updated_at")):
     """Create-or-verify a knowledge row against its natural key.
 
     key_where: the natural key as {column: value} ({} for the single-row
     table, person). provided: the non-None fields the caller passed (key
     columns included, so the create insert is complete). defaults:
     create-only values for columns not in provided (governance defaults,
-    enum defaults). Returns the row id.
+    enum defaults). stamps: the timestamp columns the table carries
+    (application has created_at only). Returns the row id.
 
     The conflict rule (duplicate + conflict handling): a provided
     value that differs from a stored non-NULL value is refused — a
     ValueError naming the table, key, field, stored and given values — and
     nothing is written. Stored NULLs may be filled by a re-run (those
-    columns + updated_at). An all-matching re-run is an idempotent no-op.
-    Key comparisons are NULL-safe (IS ?).
+    columns + updated_at when the table has one). An all-matching re-run
+    is an idempotent no-op. Key comparisons are NULL-safe (IS ?).
     """
     if key_where:
         where_sql = " AND ".join("%s IS ?" % k for k in key_where)
@@ -1064,8 +1372,9 @@ def _upsert(conn, table, key_where, provided, defaults):
         values = [provided[c] if c in provided
                   else key_where[c] if c in key_where else defaults[c]
                   for c in cols]
-        cols += ["created_at", "updated_at"]
-        values += [_today_iso(), _today_iso()]
+        stamp_cols = [c for c in stamps if c not in cols]
+        cols += stamp_cols
+        values += [_today_iso() for _ in stamp_cols]
         cur = conn.execute(
             "INSERT INTO %s (%s) VALUES (%s)"
             % (table, ",".join(cols), ",".join("?" * len(cols))),
@@ -1083,10 +1392,14 @@ def _upsert(conn, table, key_where, provided, defaults):
         if cur_val is None and val is not None:
             fills[col] = val
     if fills:
+        set_sql = ", ".join("%s = ?" % c for c in fills)
+        vals = list(fills.values())
+        if "updated_at" in stamps:
+            set_sql += ", updated_at = ?"
+            vals.append(_today_iso())
         conn.execute(
-            "UPDATE %s SET %s, updated_at = ? WHERE id = ?"
-            % (table, ", ".join("%s = ?" % c for c in fills)),
-            list(fills.values()) + [_today_iso(), stored["id"]])
+            "UPDATE %s SET %s WHERE id = ?" % (table, set_sql),
+            vals + [stored["id"]])
     return stored["id"]
 
 
@@ -1557,7 +1870,7 @@ def _walk_one(conn, etype, eid):
 INSTR_KINDS = ("priority", "preference", "constraint", "prohibition")
 INSTR_SCOPES = ("task", "application", "company", "interview_stage",
                 "search_wide", "hat")
-INSTR_SCOPE_REFS = ("thread", "application", "company", "interview", "hat")
+INSTR_SCOPE_REFS = ("application", "company", "interview", "hat")
 
 
 def instruction(db_path, body, kind, scope_type, scope_ref_type=None,
@@ -1661,17 +1974,17 @@ def withdraw_instruction(db_path, row_id):
         conn.close()
 
 
-def working_set(db_path, hat, thread_id=None, today=None):
+def working_set(db_path, hat, application_id=None, today=None):
     """The derived working set (the working-set rule in standards): rows
     where status='active' AND
     unexpired (valid_until IS NULL OR valid_until >= today ISO — a window
     ending today is still in force; expiry is the drift check's flip, and
-    thread liveness is its finding, neither is a clause of this query)
+    application liveness is its finding, neither is a clause of this query)
     AND the scope matches: search_wide, hat rows whose scope_ref_text is
-    the hat, application rows scoped to threads (all of them without a
-    thread_id, only the matching one with). Ordered by id.
+    the hat, application rows scoped to applications (all of them without
+    an application_id, only the matching one with). Ordered by id.
     Returns [(id, kind, scope, body, valid_until)] with scope rendered
-    search_wide / hat:<name> / thread:<id>."""
+    search_wide / hat:<name> / application:<id>."""
     today = today or _today_iso()
     conn = db_connect(db_path)
     try:
@@ -1680,7 +1993,7 @@ def working_set(db_path, hat, thread_id=None, today=None):
             "CASE scope_type "
             "  WHEN 'search_wide' THEN 'search_wide' "
             "  WHEN 'hat' THEN 'hat:' || scope_ref_text "
-            "  ELSE 'thread:' || scope_ref END, "
+            "  ELSE 'application:' || scope_ref END, "
             "body, valid_until "
             "FROM instruction "
             "WHERE status = 'active' "
@@ -1688,10 +2001,10 @@ def working_set(db_path, hat, thread_id=None, today=None):
             "  AND (scope_type = 'search_wide' "
             "       OR (scope_type = 'hat' AND scope_ref_text = ?) "
             "       OR (scope_type = 'application' "
-            "           AND scope_ref_type = 'thread' "
+            "           AND scope_ref_type = 'application' "
             "           AND (? IS NULL OR scope_ref = ?))) "
             "ORDER BY id",
-            (today, hat, thread_id, thread_id))
+            (today, hat, application_id, application_id))
         return cur.fetchall()
     finally:
         conn.close()
@@ -1704,8 +2017,9 @@ def working_set_drift(db_path, today=None):
         instruction whose body occurs in that next verbatim
         (case-insensitive substring; rephrased restatement is caught by
         review, not here);
-    (b) dead scope — an active thread-scoped instruction whose thread id
-        is missing from threads or whose status is rejected / closed;
+    (b) dead scope — an active application-scoped instruction whose
+        application id is missing from the derived status view or whose
+        derived status is rejected / closed (a NULL status is live);
     (c) expired — an active instruction with valid_until < today ISO:
         flipped to status='expired' (the op's one mutation, same
         transaction as the reads) and reported.
@@ -1730,18 +2044,18 @@ def working_set_drift(db_path, today=None):
                             "restated: instruction %d restated in %s's "
                             "last next" % (iid, hat))
             for iid, _body, srt, sr, _vu in active:
-                if srt != "thread":
+                if srt != "application":
                     continue
                 t = conn.execute(
-                    "SELECT company, role, status FROM threads "
-                    "WHERE id = ?", (sr,)).fetchone()
+                    "SELECT company, role, status FROM v_application_status "
+                    "WHERE application_id = ?", (sr,)).fetchone()
                 if t is None:
                     findings.append(
-                        "dead scope: instruction %d (thread %d is gone)"
+                        "dead scope: instruction %d (application %d is gone)"
                         % (iid, sr))
                 elif t[2] in ("rejected", "closed"):
                     findings.append(
-                        "dead scope: instruction %d (thread %s / %s is %s)"
+                        "dead scope: instruction %d (application %s / %s is %s)"
                         % (iid, t[0], t[1], t[2]))
             for iid, _body, _srt, _sr, vu in active:
                 if vu is not None and vu < today:
@@ -1847,6 +2161,12 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="op")
     sub.required = True
 
+    p = sub.add_parser("migrate-applications",
+                       help="one-shot: upgrade a pre-Phase-2 db onto the "
+                            "application-keyed event table (byte-verified; "
+                            "the legacy tables are dropped)")
+    p.add_argument("--db", required=True)
+
     p = sub.add_parser("migrate", help="one-shot: the ledger TSV (and log TSVs) in, the db out")
     p.add_argument("--db", required=True)
     p.add_argument("--ledger", required=True)
@@ -1854,7 +2174,8 @@ def main(argv=None):
                    help="the hat log TSVs directory (each file = one hat)")
 
     p = sub.add_parser("log-event",
-                       help="append an event and flip its thread (one op)")
+                       help="append an event and, when it sets a status, "
+                            "create-or-reuse the application (one op)")
     p.add_argument("--db", required=True)
     p.add_argument("--date", required=True)
     p.add_argument("--type", required=True, dest="etype")
@@ -1888,7 +2209,8 @@ def main(argv=None):
     p.add_argument("--out", help="default: print to stdout")
 
     p = sub.add_parser("divergence",
-                       help="check the markdown state files against thread state")
+                       help="check the markdown state files against "
+                            "application state")
     p.add_argument("--db", required=True)
     p.add_argument("--qa", required=True, help="the QA markdown file")
     p.add_argument("--cast", required=True, help="the strategy cast markdown file")
@@ -1898,15 +2220,81 @@ def main(argv=None):
     p.add_argument("--db", required=True)
     p.add_argument("--out", required=True)
 
-    p = sub.add_parser("status", help="thread states")
+    p = sub.add_parser("status", help="application states")
     p.add_argument("--db", required=True)
     p.add_argument("--company")
     p.add_argument("--live", action="store_true",
-                   help="exclude rejected/closed threads")
+                   help="exclude rejected/closed applications")
 
     p = sub.add_parser("caps", help="application counts per company (the pre-check)")
     p.add_argument("--db", required=True)
     p.add_argument("--company")
+
+    p = sub.add_parser("upsert-contact",
+                       help="create-or-verify a contact (key: name)")
+    p.add_argument("--db", required=True)
+    p.add_argument("--name", required=True)
+    p.add_argument("--title")
+    p.add_argument("--company")
+    p.add_argument("--email")
+    p.add_argument("--linkedin-ref", dest="linkedin_ref")
+    p.add_argument("--how-met", dest="how_met")
+
+    p = sub.add_parser("upsert-job-opening",
+                       help="create-or-verify a job opening (key: company + title)")
+    p.add_argument("--db", required=True)
+    p.add_argument("--company", required=True)
+    p.add_argument("--title", required=True)
+    p.add_argument("--location")
+    p.add_argument("--work-mode", dest="work_mode")
+    p.add_argument("--source")
+    p.add_argument("--url")
+    p.add_argument("--posted-date", dest="posted_date")
+    p.add_argument("--posted-comp", dest="posted_comp")
+    p.add_argument("--jd-ref", dest="jd_ref")
+    p.add_argument("--status", choices=list(JOB_OPENING_STATUSES))
+
+    p = sub.add_parser("upsert-application",
+                       help="create-or-verify an application "
+                            "(key: company + role; reuses the ledger's row)")
+    p.add_argument("--db", required=True)
+    p.add_argument("--company", required=True)
+    p.add_argument("--role", required=True)
+    p.add_argument("--job-opening-id", type=int, dest="job_opening_id")
+    p.add_argument("--contact")
+    p.add_argument("--applied-date", dest="applied_date")
+
+    p = sub.add_parser("interview",
+                       help="create-or-verify an interview round "
+                            "(key: application + round; status is set by "
+                            "set-interview)")
+    p.add_argument("--db", required=True)
+    p.add_argument("--application-id", required=True, type=int,
+                   dest="application_id")
+    p.add_argument("--round", required=True)
+    p.add_argument("--kind", choices=list(INTERVIEW_KINDS))
+    p.add_argument("--scheduled-at", dest="scheduled_at")
+    p.add_argument("--status", choices=list(INTERVIEW_STATUSES))
+    p.add_argument("--feedback-ref", dest="feedback_ref")
+
+    p = sub.add_parser("set-interview",
+                       help="the only interview status mutation")
+    p.add_argument("--db", required=True)
+    p.add_argument("--id", required=True, type=int, dest="row_id")
+    p.add_argument("--status", required=True,
+                   choices=list(INTERVIEW_STATUSES))
+
+    p = sub.add_parser("add-interaction",
+                       help="insert an interaction (insert-only)")
+    p.add_argument("--db", required=True)
+    p.add_argument("--kind", required=True, choices=list(INTERACTION_KINDS))
+    p.add_argument("--direction", required=True,
+                   choices=list(INTERACTION_DIRECTIONS))
+    p.add_argument("--occurred-at", required=True, dest="occurred_at")
+    p.add_argument("--contact")
+    p.add_argument("--company")
+    p.add_argument("--application-id", type=int, dest="application_id")
+    p.add_argument("--summary")
 
     p = sub.add_parser("upsert-person", help="create-or-verify the single person row")
     p.add_argument("--db", required=True)
@@ -2036,7 +2424,7 @@ def main(argv=None):
                             "the working-set rule)")
     p.add_argument("--db", required=True)
     p.add_argument("--hat", required=True)
-    p.add_argument("--thread-id", type=int, dest="thread_id")
+    p.add_argument("--application-id", type=int, dest="application_id")
 
     p = sub.add_parser("neighbors",
                        help="walk the connected records around an entity")
@@ -2061,10 +2449,17 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    if args.op == "migrate":
+    if args.op == "migrate-applications":
+        res = migrate_applications(args.db)
+        print("applications=%d events=%d instructions_remapped=%d "
+              "dropped=%s" % (res["applications"], res["events"],
+                              res["instructions_remapped"],
+                              ",".join(res["dropped"])))
+    elif args.op == "migrate":
         counts = migrate(args.db, args.ledger, logs_dir=args.logs_dir)
         print(
-            "events=%(events)d threads=%(threads)d run_logs=%(run_logs)d" % counts
+            "events=%(events)d applications=%(applications)d "
+            "run_logs=%(run_logs)d" % counts
         )
     elif args.op == "log-event":
         eid = log_event(args.db, args.date, args.etype, args.company, args.role,
@@ -2109,6 +2504,34 @@ def main(argv=None):
     elif args.op == "caps":
         for company, count in caps(args.db, company=args.company):
             print("%s\t%d" % (company, count))
+    elif args.op == "upsert-contact":
+        rowid = upsert_contact(args.db, args.name, args.title, args.company,
+                               args.email, args.linkedin_ref, args.how_met)
+        print("id %d" % rowid)
+    elif args.op == "upsert-job-opening":
+        rowid = upsert_job_opening(
+            args.db, args.company, args.title, args.location, args.work_mode,
+            args.source, args.url, args.posted_date, args.posted_comp,
+            args.jd_ref, args.status)
+        print("id %d" % rowid)
+    elif args.op == "upsert-application":
+        rowid = upsert_application(args.db, args.company, args.role,
+                                   args.job_opening_id, args.contact,
+                                   args.applied_date)
+        print("id %d" % rowid)
+    elif args.op == "interview":
+        rowid = interview(args.db, args.application_id, args.round,
+                          args.kind, args.scheduled_at, args.status,
+                          args.feedback_ref)
+        print("id %d" % rowid)
+    elif args.op == "set-interview":
+        set_interview(args.db, args.row_id, args.status)
+        print("interview %d -> %s" % (args.row_id, args.status))
+    elif args.op == "add-interaction":
+        rowid = add_interaction(args.db, args.kind, args.direction,
+                                args.occurred_at, args.contact, args.company,
+                                args.application_id, args.summary)
+        print("id %d" % rowid)
     elif args.op == "upsert-person":
         rowid = upsert_person(args.db, args.full_name, args.objective,
                               args.location, as_user=(args.as_user_flag != "ai"))
@@ -2179,7 +2602,7 @@ def main(argv=None):
         return 0
     elif args.op == "working-set":
         print(format_tsv_row(["id", "kind", "scope", "body", "valid_until"]))
-        for row in working_set(args.db, args.hat, args.thread_id):
+        for row in working_set(args.db, args.hat, args.application_id):
             print(format_tsv_row(
                 ["" if v is None else str(v) for v in row]))
     elif args.op == "instruction":

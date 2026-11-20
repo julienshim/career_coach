@@ -95,7 +95,7 @@ What to say, and which hat picks it up:
 
 - "Here is a JD" (or a batch) → **Sourcing** — apply/skip, the resume call, the Q&A, the logging.
 - "I have an interview at X" → **Interview** — the game plan, in your voice.
-- "X answered — here is the outcome" → the outcome is logged through the store (`log-event` — the thread state flip rides the op — plus the thread hub README): an application-stage event by **Sourcing**; a round outcome by **Interview**, which on a confirmed rejection also runs the distillation.
+- "X answered — here is the outcome" → the outcome is logged through the store (`log-event` — the application status flip rides the op — plus the application hub README): an application-stage event by **Sourcing**; a round outcome by **Interview**, which on a confirmed rejection also runs the distillation.
 - "Update my LinkedIn / GitHub / portfolio" → **Presence** — one voice, three registers.
 - "Where is the search going? Should I keep pushing X?" → **Strategy** — the lane read, the placement call.
 - "Something in the brain feels off" → **Architect** — the audit.
@@ -184,6 +184,14 @@ The build that added the knowledge layer came with its working documents: the ar
 
 The boundary now matches what the root design docs already established: design, consultation, and planning documents live under `docs/` and are gitignored — never tracked. The tracked tree is the product: the hats, the standards, the store tooling, and the record of what changed. And the why — why each piece exists, which failure class it prevents — lives in this journal, edited to the present. A deliverable is read once; a journal is read every time someone asks why.
 
+### 11. Unifying the operational layer
+
+The operational layer was still the first model: a ledger of strings and a derived table of thread states, sitting beside the entities the previous build added with nothing able to reach them. An application was a loose company + role pair in text; an event could not be pointed at; and a directive scoped to an application pointed at a table the new model had no entity behind. Two records of the same application stood side by side, and only one of them was a queryable row.
+
+The application became the entity. The ledger rows now key on it, and the live status is a view generated from those rows by the flip table at every open — no one can hand-set it, and a re-apply flips a rejected application back to submitted on the same row. A status-setting event creates or reuses the application in the same atomic op, and the operational writes sit on the entity: contact, job opening, application, interview round, interaction — the same create-or-verify discipline as the knowledge layer. A one-shot migration moved the existing database: every row copied with its identity, the directive scopes remapped onto the new applications, and the ledger's raw rows verified byte for byte before the old tables were dropped — the third-party-safe ledger came out of the migration exactly as it went in.
+
+The legacy tables are gone from the schema, and "thread" in the store's sense is "application". The ledger's bytes are the proof.
+
 ### Where it stands today
 
 The system is built on a small set of governing principles:
@@ -193,14 +201,14 @@ The system is built on a small set of governing principles:
 - **Manifest-driven file resolution:** File locations are resolved through the manifest. The paths shown in the hats are the default layout for reference; the user's manifest is authoritative.
 - **Shared standards across every hat:** Common rules live in the standards and apply consistently, regardless of which hat is active.
 - **Explicit procedures and boundaries:** Each hat follows a defined procedure with clear decision points, write boundaries, and output requirements.
-- **Purpose-built continuity:** Progress and continuity are maintained through the store — the dated events, the derived thread states, the per-hat log rows — not accumulated in a catch-all session file. The text tables are its generated exports.
+- **Purpose-built continuity:** Progress and continuity are maintained through the store — the dated events, the derived application states, the per-hat log rows — not accumulated in a catch-all session file. The text tables are its generated exports.
 - **Files as the source of state:** Sessions are disposable; the files are authoritative. A fresh agent session reconstructs its full working context starting from `AGENTS.md` (the manifest, the standards, the hat's log).
 
 Together, these principles are designed to keep the system coherent as it grows. New capabilities should extend the existing structure, not create competing sources of truth, blur established boundaries, or introduce additional rules for the agent to reconcile.
 
 ## Where state lives
 
-The data layer's system of record is the store: one database holding the dated events, the thread states (derived from the events, never hand-set), and the per-hat log rows. The named operations in `standards/STANDARDS.md` § The store are the only writer; everything else reads.
+The data layer's system of record is the store: one database holding the dated events, the applications (the entities the events key on), the application states (derived from the events, never hand-set), and the per-hat log rows. The named operations in `standards/STANDARDS.md` § The store are the only writer; everything else reads.
 
 - the store (the `store` concept, resolved by the manifest; by default `instance/db/`) — the system of record.
 - `instance/ledger.tsv` — the search record. A generated export of the store's events: regenerated at the end of any run that wrote events, never hand-edited.
@@ -208,7 +216,7 @@ The data layer's system of record is the store: one database holding the dated e
 - `instance/config.md` — the user's tunables: floor, pace, follow-up cadence, claim duties.
 - `standards/STANDARDS.md` — the shared rules.
 
-The narrative state — what is pending at a live thread, what happened in the room — stays in the dated hub files: the store holds the factual, dated record, and the hub's live state is checked against it (the `divergence` op).
+The narrative state — what is pending at a live application, what happened in the room — stays in the dated hub files: the store holds the factual, dated record, and the hub's live state is checked against it (the `divergence` op).
 
 This separation allows the system to resume work without relying on a single session file. Each surface has a defined purpose and serves as the reference for its own category of information.
 

@@ -20,12 +20,12 @@ A concept resolves to a file or a directory. Every target must exist. A concept 
 | `evidence` | the ground truth | an index (catalog) plus one file per EVID (claim, numbers, date, provenance) | `instance/career-map/evidence/` |
 | `evidence_code` | the user's work snapshots — the receipts | the code the EVIDs cite by path; agent-off-limits (the rule in `standards/STANDARDS.md`) | `instance/evidence-code/` |
 | `skills` | the skills inventory | technical, domain, methodologies | `instance/career-map/skills/` |
-| `store` | the data layer's system of record | one sqlite db: `events` (append-only dated events — no edit path), `threads` (derived status per company + role — never hand-set), `run_logs` (the hat logs). The ops in `standards/STANDARDS.md` § The store are the only writer; `ledger` and the `logs` TSVs are its generated exports | `instance/db/career.db` |
+| `store` | the data layer's system of record | one sqlite db: `event` (append-only dated events — no edit path), `application` (one row per company + role as logged — the entity the events key on), `v_application_status` (the derived status — never hand-set), `run_logs` (the hat logs). The ops in `standards/STANDARDS.md` § The store are the only writer; `ledger` and the `logs` TSVs are its generated exports | `instance/db/career.db` |
 | `ledger` | the application ledger — the store's generated export | a dated row per application and outcome. The search record's spine. Third-party-safe: factual event, link, posted facts only — agent deliberation lives in the sourcing log row. Regenerated at the end of any run that wrote events, never hand-edited | `instance/ledger.tsv` |
 | `resume_default` | the default resume | the submitted-by-default resume | `instance/resume/` (the per-user manifest resolves the file) |
 | `resume_qa` | the per-application Q&A record | one section per company: date, status, resume call, the submitted answers verbatim | `instance/resume/QA.md` |
 | `surfaces` | the public surfaces | the LinkedIn / GitHub / portfolio copy plus the working doc | `instance/social-media/` |
-| `interviews` | per-company prep | one dir per live company plus the shared standard banks; closed threads are distilled into the standard bank and the company dir deleted (the store is the status source of truth) | `instance/interviews/` |
+| `interviews` | per-company prep | one dir per live company plus the shared standard banks; closed applications are distilled into the standard bank and the company dir deleted (the store is the status source of truth) | `instance/interviews/` |
 | `logs` | per-hat session logs — the store's generated export | one dated TSV per hat (the "pick up from last" scoped to the hat); regenerated, never hand-edited | `instance/logs/` |
 
 ## The standard layout (the default file tree)
