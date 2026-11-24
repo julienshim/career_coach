@@ -15,6 +15,7 @@ python3 stdlib only. No dependencies.
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -371,7 +372,9 @@ def _status_view_sql():
     """The v_application_status view, generated from FLIP (the single source
     of truth for the flip table). Last status-setting event in
     (date_iso, id) order — the v1 ordering, exactly as the legacy
-    derivation ran it."""
+    derivation ran it — plus the last activity: the newest event of any
+    kind, neutral included. The status derives from status-setting
+    events only; the activity is a second, wider read."""
     cases, setting = [], []
     for outcome, st in FLIP.items():
         if st is None:
@@ -384,7 +387,9 @@ def _status_view_sql():
         "SELECT a.id AS application_id, c.name AS company, a.role, "
         "e.outcome AS last_outcome, e.date_iso AS status_date, "
         "e.id AS last_event_id, "
-        "CASE e.outcome\n" + "\n".join(cases) + "\n  END AS status "
+        "CASE e.outcome\n" + "\n".join(cases) + "\n  END AS status, "
+        "ea.id AS activity_event_id, ea.type AS activity_type, "
+        "ea.outcome AS activity_outcome "
         "FROM application a "
         "JOIN company c ON c.id = a.company_id "
         "LEFT JOIN event e ON e.application_id = a.id "
@@ -393,8 +398,13 @@ def _status_view_sql():
         "AND e2.outcome IN (" + ", ".join(setting) + ") "
         # both DESC: the last event in (date_iso, id) order. A bare
         # 'date_iso, id DESC' would sort the date ASC — the DESC binds to
-        # the last term only.
-        "ORDER BY e2.date_iso DESC, e2.id DESC LIMIT 1)"
+        # the last term only. The activity join has the same shape minus
+        # the outcome filter — any kind, neutral included.
+        "ORDER BY e2.date_iso DESC, e2.id DESC LIMIT 1) "
+        "LEFT JOIN event ea ON ea.application_id = a.id "
+        "AND ea.id = (SELECT e3.id FROM event e3 "
+        "WHERE e3.application_id = a.id "
+        "ORDER BY e3.date_iso DESC, e3.id DESC LIMIT 1)"
     )
 
 
@@ -409,24 +419,78 @@ def company_key(company):
     return company.split(" / ")[0].strip()
 
 
+def _derived_state_hash(conn, seed):
+    """Hash a derived object's rebuild inputs: the seed statements plus, for
+    each indexed entity, the exact indexed text per row (the fill's input),
+    in id order. The rebuild fires exactly when the fill input changes —
+    appends and in-place edits alike. The store is small; the probe cost is
+    a full read of the indexed columns, which is cheap at this scale."""
+    h = hashlib.sha256()
+    for part in seed:
+        h.update(part.encode("utf-8"))
+    for entity, cols in SEARCHED_COLUMNS.items():
+        text = " || ' ' || ".join("IFNULL(%s, '')" % (c,) for c in cols)
+        for row in conn.execute(
+                "SELECT id, %s FROM %s ORDER BY id" % (text, entity)):
+            h.update(("%s:%s:%s" % (entity, row[0], row[1])).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _meta_value(conn, key):
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _meta_put(conn, key, value):
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        (key, value))
+
+
+def _rebuild_derived(conn, meta_key, hash_value, statements):
+    """Rebuild a derived object only when its hash differs from the stored
+    one. The drop/create runs under the write lock (BEGIN IMMEDIATE) with
+    the busy timeout armed, so concurrent opens wait their turn instead of
+    interleaving a drop with another's create."""
+    if _meta_value(conn, meta_key) == hash_value:
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for sql in statements:
+            conn.execute(sql)
+        _meta_put(conn, meta_key, hash_value)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
 def db_connect(db_path):
-    """Open (creating if needed) the store db with WAL on and the schema present."""
+    """Open (creating if needed) the store db with WAL on, the busy timeout
+    armed, and the schema present. Derived state (the status view, the FTS
+    index) is rebuilt only when its definition or data changed — never a
+    blind drop/create on every open."""
     p = pathlib.Path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p))
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(SCHEMA)
-    # the view is derived state — rebuilt on every open, the rebuild pattern
-    # for derived state; generated from FLIP so the flip table stays
-    # single-sourced
-    conn.execute("DROP VIEW IF EXISTS v_application_status")
-    conn.execute(_status_view_sql())
-    # the FTS index is derived state — rebuilt on every open (the view
-    # pattern); the explicit commit makes the fill durable so the query
-    # service's separate read-only connection sees it
-    conn.execute("DROP TABLE IF EXISTS search_index")
-    conn.execute(_search_index_ddl())
-    conn.execute(_search_index_fill())
+    # the view is derived state — generated from FLIP so the flip table
+    # stays single-sourced; rebuilt only when the definition changed
+    view_sql = _status_view_sql()
+    _rebuild_derived(conn, "view_hash",
+                     hashlib.sha256(view_sql.encode("utf-8")).hexdigest(),
+                     ["DROP VIEW IF EXISTS v_application_status", view_sql])
+    # the FTS index is derived state — rebuilt only when the indexed data
+    # changed; the fill's commit makes it durable so the query service's
+    # separate read-only connection sees it
+    si_hash = _derived_state_hash(
+        conn, [_search_index_ddl(), _search_index_fill()])
+    _rebuild_derived(conn, "search_index_hash", si_hash,
+                     ["DROP TABLE IF EXISTS search_index",
+                      _search_index_ddl(), _search_index_fill()])
     conn.commit()
     return conn
 
@@ -546,18 +610,85 @@ def write_atomic(out_path, data):
         raise
 
 
+def _find_application(conn, company_raw, role):
+    """The application for (company key, role), or None — read-only. The
+    role is compared after strip on both sides: whitespace drift is not a
+    new application."""
+    key = company_key(company_raw)
+    if key == "n/a" or role == "n/a":
+        return None
+    row = conn.execute(
+        "SELECT a.id FROM application a "
+        "JOIN company c ON a.company_id = c.id "
+        "WHERE c.name = ? AND TRIM(a.role) = ?",
+        (key, role.strip())).fetchone()
+    return row[0] if row else None
+
+
 def _resolve_application(conn, company_raw, role):
     """Create-or-reuse the application for (company key, role) — the v1
     thread-creation behavior, on the entity. company_raw is the value as
     recorded (it may carry a ' / ' contact part); the key is computed here,
-    so an already-keyed value passes through unchanged. Returns the
-    application id, or None for the n/a pairs (they have no application)."""
+    so an already-keyed value passes through unchanged. The stored role is
+    the stripped form; the lookup tolerates whitespace drift.
+    Returns the application id, or None for the n/a pairs (they have no
+    application)."""
+    existing = _find_application(conn, company_raw, role)
+    if existing is not None:
+        return existing
     key = company_key(company_raw)
     if key == "n/a" or role == "n/a":
         return None
     cid = _upsert(conn, "company", {"name": key}, {}, {})
-    return _upsert(conn, "application", {"company_id": cid, "role": role},
-                   {}, {}, stamps=("created_at",))
+    cur = conn.execute(
+        "INSERT INTO application (company_id, role, created_at) "
+        "VALUES (?, ?, ?)", (cid, role.strip(), _today_iso()))
+    return cur.lastrowid
+
+
+def _event_application(conn, company_raw, role, outcome):
+    """The application link for an event: every event whose
+    (company key, role) matches an existing application is linked to it,
+    regardless of outcome; an application is created only when the
+    outcome sets a status (the flip's None semantics kept for status).
+    Returns the application id, or None (n/a pairs, or a neutral event
+    with no application yet)."""
+    if FLIP[outcome] is not None:
+        return _resolve_application(conn, company_raw, role)
+    return _find_application(conn, company_raw, role)
+
+
+def _link_orphans(conn):
+    """Backfill: set application_id on every event that has no link
+    but whose (company_key, role) matches an existing application. Role
+    compared after strip; on a match the oldest application wins (a
+    whitespace-drift duplicate is not the record). The link column
+    is repairable; raw_row is untouched, so the ledger's exports stay
+    byte-stable. Returns the number of events linked."""
+    match = ("SELECT MIN(a.id) FROM application a "
+             "JOIN company c ON a.company_id = c.id "
+             "WHERE c.name = event.company_key "
+             "AND TRIM(a.role) = TRIM(event.role)")
+    cur = conn.execute(
+        "UPDATE event SET application_id = (" + match + ") "
+        "WHERE application_id IS NULL "
+        "AND company_key != 'n/a' AND TRIM(role) != 'n/a' "
+        "AND EXISTS (" + match.replace("MIN(a.id)", "1") + ")")
+    return cur.rowcount
+
+
+def repair(db_path):
+    """One-shot backfill: link every orphaned event to
+    its application on (company key, role) match. The events are
+    append-only as to content; the link column is repairable. The ledger's
+    raw rows are untouched, so the export is byte-stable. Idempotent — a
+    second run links nothing. Returns {"linked": int}."""
+    conn = db_connect(db_path)
+    try:
+        with conn:
+            return {"linked": _link_orphans(conn)}
+    finally:
+        conn.close()
 
 
 LOG_HEADER = "Date\tTask\tAction\tDecision\tNext"
@@ -568,9 +699,12 @@ def migrate(db_path, ledger_path, logs_dir=None):
     out. Fails closed (unknown shape, unknown outcome, malformed date —
     nothing is written when it raises) and refuses a non-empty db. Headers
     are captured into meta; every row is stored with its exact raw line so
-    exports are byte-stable. Status-setting rows create-or-reuse the
-    application for (company key, role), in first-status-event order (the
-    v1 thread order). A 4-field log row (missing trailing empty Next) is
+    exports are byte-stable. A row whose (company key, role) matches an
+    existing application is linked to it, regardless of outcome; a
+    row whose outcome sets a status creates the application if there is
+    none, in first-status-event order (the v1 thread order); a final
+    backfill pass links the neutral rows that precede their pair's first
+    status-setting row. A 4-field log row (missing trailing empty Next) is
     padded with next=''; any other shape fails.
     Returns {"events": int, "applications": int, "run_logs": int}.
     """
@@ -596,8 +730,7 @@ def migrate(db_path, ledger_path, logs_dir=None):
                     raise ValueError(
                         "unknown outcome %r (row: %r)" % (outcome, raw[:80])
                     )
-                app_id = _resolve_application(conn, company, role) \
-                    if FLIP[outcome] is not None else None
+                app_id = _event_application(conn, company, role, outcome)
                 conn.execute(
                     "INSERT INTO event "
                     "(date, date_iso, type, application_id, company_key, "
@@ -606,6 +739,10 @@ def migrate(db_path, ledger_path, logs_dir=None):
                     (date, to_iso(date), etype, app_id, company_key(company),
                      role, channel, outcome, note, raw, _today_iso()),
                 )
+            # a neutral row can precede the pair's first
+            # status-setting row in the ledger — the one backfill pass
+            # links those orphans to the applications the load created.
+            _link_orphans(conn)
             if logs_dir is not None:
                 for log_path in sorted(pathlib.Path(logs_dir).glob("*.tsv")):
                     hat = log_path.stem
@@ -677,25 +814,27 @@ def migrate_applications(db_path):
             threads = conn.execute(
                 "SELECT id, company, role FROM threads ORDER BY id"
             ).fetchall()
-            mapping, pair_map = {}, {}
+            mapping = {}
             for tid, company, role in threads:
-                app_id = _resolve_application(conn, company, role)
-                mapping[tid] = app_id
-                pair_map[(company_key(company), role)] = app_id
+                mapping[tid] = _resolve_application(conn, company, role)
             events = conn.execute(
                 "SELECT id, date, date_iso, type, company, role, channel, "
                 "outcome, note, raw_row FROM events ORDER BY id").fetchall()
             for (eid, date, d_iso, etype, company, role, channel, outcome,
                  note, raw) in events:
-                key = company_key(company)
                 conn.execute(
                     "INSERT INTO event (id, date, date_iso, type, "
                     "application_id, company_key, role, channel, outcome, "
                     "note, raw_row, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (eid, date, d_iso, etype,
-                     pair_map.get((key, role)), key, role, channel,
+                     _event_application(conn, company, role, outcome),
+                     company_key(company), role, channel,
                      outcome, note, raw, _today_iso()))
+            # the legacy rows carried thread links only on the
+            # thread's own rows — the backfill gives every row whose
+            # pair matches an application its link.
+            _link_orphans(conn)
             remapped = 0
             for tid, app_id in mapping.items():
                 cur = conn.execute(
@@ -745,9 +884,14 @@ def export_ledger(db_path, out_path):
     write_atomic(out_path, data.encode("utf-8"))
 
 
-def log_event(db_path, date, etype, company, role, channel, outcome, note):
-    """Append an event and, when the outcome sets a status, create-or-reuse
-    the application for (company key, role) — one transaction, one op. The
+def log_event(db_path, date, etype, company, role, channel, outcome, note,
+              url=None):
+    """Append an event, linked to its application: the (company key, role)
+    match resolves regardless of outcome, and the application is
+    created only when the outcome sets a status — one transaction, one op.
+    With url, the posting is upserted in the same op (key: company + role
+    as title + the link — the link is the duplicate key) and attached to
+    the application when the link slot is free. The
     validations run before any write: a refusal (a PII pattern in the note,
     an unknown outcome, a malformed date) leaves nothing behind, no
     application/company side effects included. Returns the new event id.
@@ -759,9 +903,21 @@ def log_event(db_path, date, etype, company, role, channel, outcome, note):
     conn = db_connect(db_path)
     try:
         with conn:
-            app_id = None
-            if FLIP[outcome] is not None:
-                app_id = _resolve_application(conn, company, role)
+            # link the event to its application whenever the
+            # (company key, role) matches — neutral outcomes included;
+            # create the application only when the outcome sets a status.
+            app_id = _event_application(conn, company, role, outcome)
+            if url is not None:
+                # the posting's link is the duplicate key: upsert the
+                # posting in the same op and attach it to the
+                # application when the link slot is free
+                jo_id = _job_opening_upsert(
+                    conn, company_key(company), role, url, {})
+                if app_id is not None:
+                    conn.execute(
+                        "UPDATE application SET job_opening_id = ? "
+                        "WHERE id = ? AND job_opening_id IS NULL",
+                        (jo_id, app_id))
             cur = conn.execute(
                 "INSERT INTO event "
                 "(date, date_iso, type, application_id, company_key, role, "
@@ -976,16 +1132,21 @@ def export_claim(db_path, date_from, date_to, out_path=None):
 
 def status(db_path, company=None, live=False):
     """Application states: (company, role, status, status_date, req,
-    last_event_id) in application-id order. The status is derived (the view
-    over the application's events); status_date is the as-recorded date of
-    the last status-setting event (None when it has none); req is the first
-    'req #?digits' among the application's status-setting events in
-    (date_iso, id) order (the v1 derivation). --live excludes rejected/
-    closed; a NULL status passes --live."""
+    last_event_id, activity_date, activity_type, activity_outcome) in
+    application-id order. The status is derived (the view over the
+    application's events) from status-setting events only; status_date is
+    the as-recorded date of the last status-setting event (None when it
+    has none); req is the first 'req #?digits' among the application's
+    status-setting events in (date_iso, id) order (the v1 derivation).
+    The activity triple is the as-recorded date, type, and outcome of
+    the newest event of any kind — neutral included (None when it has
+    none). --live excludes rejected / closed; a NULL status passes
+    --live."""
     conn = db_connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT application_id, company, role, status, last_event_id "
+            "SELECT application_id, company, role, status, last_event_id, "
+            "activity_event_id, activity_type, activity_outcome "
             "FROM v_application_status ORDER BY application_id"
         ).fetchall()
         dates = dict(conn.execute("SELECT id, date FROM event").fetchall())
@@ -1003,12 +1164,13 @@ def status(db_path, company=None, live=False):
             if m:
                 reqs[aid] = m.group(1)
         out = []
-        for aid, comp, role, st, le in rows:
+        for aid, comp, role, st, le, ae, at, ao in rows:
             if company and comp != company:
                 continue
             if live and st in ("rejected", "closed"):
                 continue
-            out.append((comp, role, st, dates.get(le), reqs.get(aid), le))
+            out.append((comp, role, st, dates.get(le), reqs.get(aid), le,
+                        dates.get(ae), at, ao))
         return out
     finally:
         conn.close()
@@ -1087,10 +1249,14 @@ def upsert_contact(db_path, name, title=None, company=None, email=None,
 def upsert_job_opening(db_path, company, title, location=None, work_mode=None,
                        source=None, url=None, posted_date=None,
                        posted_comp=None, jd_ref=None, status=None):
-    """Create-or-verify a job opening keyed by (company, title). The company
-    must exist. status is enum-validated (open / applied / closed), default
-    'open'. posted_date is M/D/YYYY as stated, stored ISO. Returns the row
-    id."""
+    """Create-or-verify a job opening keyed by (company, title, url) — the
+    posting's link is the duplicate key: the
+    same title at the same company can carry several postings, one per
+    link. The legacy form (no url) resolves the unambiguous title (zero
+    or one posting) and refuses — naming every link — when the title
+    carries several. The company must exist. status is enum-validated
+    (open / applied / closed), default 'open'. posted_date is M/D/YYYY
+    as stated, stored ISO. Returns the row id."""
     if status is not None and status not in JOB_OPENING_STATUSES:
         raise ValueError("bad status %r (want one of: %s)"
                          % (status, ", ".join(JOB_OPENING_STATUSES)))
@@ -1099,20 +1265,48 @@ def upsert_job_opening(db_path, company, title, location=None, work_mode=None,
     conn = db_connect(db_path)
     try:
         with conn:
-            cid = _company_id_or_refuse(conn, company)
-            provided = {"company_id": cid, "title": title}
-            for col, val in (("location", location), ("work_mode", work_mode),
-                             ("source", source), ("url", url),
+            extra = {}
+            for col, val in (("location", location),
+                             ("work_mode", work_mode),
+                             ("source", source),
                              ("posted_date", posted_date),
                              ("posted_comp", posted_comp),
                              ("jd_ref", jd_ref), ("status", status)):
                 if val is not None:
-                    provided[col] = val
-            return _upsert(conn, "job_opening",
-                           {"company_id": cid, "title": title}, provided,
-                           {"status": "open"})
+                    extra[col] = val
+            return _job_opening_upsert(conn, company, title, url, extra)
     finally:
         conn.close()
+
+
+def _job_opening_upsert(conn, company_key_value, title, url, provided_extra):
+    """The conn-level core of upsert_job_opening (key: company + title +
+    url — the link is the duplicate key; the legacy no-url form resolves
+    the unambiguous title and refuses the ambiguous one, naming every
+    link). company_key_value is the company key as the caller holds it;
+    provided_extra carries the non-key fields for the create-or-verify.
+    Returns the row id."""
+    cid = _company_id_or_refuse(conn, company_key_value)
+    if url is None:
+        rows = conn.execute(
+            "SELECT id, url FROM job_opening "
+            "WHERE company_id = ? AND title = ? ORDER BY id",
+            (cid, title)).fetchall()
+        if len(rows) > 1:
+            raise ValueError(
+                "refusing to upsert job opening (%s, %r) without a url: "
+                "%d postings share the title (%s) — pass --url to name "
+                "the posting"
+                % (company_key_value, title, len(rows),
+                   ", ".join(r[1] or "(no link)" for r in rows)))
+    provided = {"company_id": cid, "title": title}
+    key_cols = {"company_id": cid, "title": title}
+    if url is not None:
+        provided["url"] = url
+        key_cols["url"] = url
+    provided.update(provided_extra)
+    return _upsert(conn, "job_opening", key_cols, provided,
+                   {"status": "open"})
 
 
 def upsert_application(db_path, company, role, job_opening_id=None,
@@ -1585,6 +1779,12 @@ def _search_execute(conn, vplan):
     return {"results": results, "meta": meta}
 
 
+EXAMPLE_PLAN = ('{"entity": "event", "filters": '
+                '[{"field": "company_key", "op": "=", "value": "Acme"}], '
+                '"order_by": {"field": "date_iso", "direction": "desc"}, '
+                '"limit": 5}')
+
+
 def query(db_path, plan):
     """The constrained query service (spec section 9). The plan is
     validated fully, then executed on a structurally read-only
@@ -1763,6 +1963,7 @@ FKS = [
     ("document",      "supersedes_id",   "document",    "supersedes",         "out"),
     ("contact",       "company_id",      "company",     "affiliated (current)", "out"),
     ("interview",     "application_id",  "application", "has_rounds",         "out"),
+    ("event",         "application_id",  "application", "logged_on",          "out"),
 ]
 
 # Tables carrying provenance + governance_state (the governance op's query
@@ -2338,8 +2539,12 @@ def _walk_one(conn, etype, eid):
     provenance, governance_state, created_at) — junction rows carry their
     governance fields; FK edges carry empty attrs and governance fields.
     direction: junction rows — which endpoint the neighbor sits on
-    ('to' / 'from'); FK edges — 'out' / 'in' per the FKS semantics."""
+    ('to' / 'from'); FK edges — 'out' / 'in' per the FKS semantics.
+    A type outside ENTITIES (event — the target of the logged_on edge)
+    is a walk leaf: no outgoing edges."""
     edges = []
+    if etype not in ENTITIES:
+        return edges
     table = ENTITIES[etype]["table"]
     for jname, spec in JUNCTIONS.items():
         if spec["from"][0] == etype:
@@ -2372,9 +2577,11 @@ def _walk_one(conn, etype, eid):
                 edges.append((rel, "out", f_other, r[0], "", "", "", ""))
     for f_type, f_col, f_other, rel, _d in FKS:
         if f_other == etype:
+            otable = ENTITIES[f_type]["table"] \
+                if f_type in ENTITIES else f_type
             for (oid,) in conn.execute(
                     "SELECT id FROM %s WHERE %s = ? ORDER BY id"
-                    % (ENTITIES[f_type]["table"], f_col), (eid,)):
+                    % (otable, f_col), (eid,)):
                 edges.append((rel, "in", f_type, oid, "", "", "", ""))
     return edges
 
@@ -2679,6 +2886,12 @@ def main(argv=None):
                             "the legacy tables are dropped)")
     p.add_argument("--db", required=True)
 
+    p = sub.add_parser(
+        "repair",
+        help="one-shot: link every orphaned event to its application on "
+             "(company key, role) match; the ledger stays byte-stable")
+    p.add_argument("--db", required=True)
+
     p = sub.add_parser("migrate", help="one-shot: the ledger TSV (and log TSVs) in, the db out")
     p.add_argument("--db", required=True)
     p.add_argument("--ledger", required=True)
@@ -2686,8 +2899,9 @@ def main(argv=None):
                    help="the hat log TSVs directory (each file = one hat)")
 
     p = sub.add_parser("log-event",
-                       help="append an event and, when it sets a status, "
-                            "create-or-reuse the application (one op)")
+                       help="append an event, linked to its application on "
+                            "(company key, role) match; the application is "
+                            "created only when the outcome sets a status")
     p.add_argument("--db", required=True)
     p.add_argument("--date", required=True)
     p.add_argument("--type", required=True, dest="etype")
@@ -2696,6 +2910,10 @@ def main(argv=None):
     p.add_argument("--channel", required=True)
     p.add_argument("--outcome", required=True)
     p.add_argument("--note", required=True)
+    p.add_argument("--url",
+                   help="the posting's link — upserts the job_opening "
+                        "(key: company + role + link) and attaches it to "
+                        "the application in the same op")
 
     p = sub.add_parser("log-run", help="append a hat log row")
     p.add_argument("--db", required=True)
@@ -2753,7 +2971,9 @@ def main(argv=None):
     p.add_argument("--how-met", dest="how_met")
 
     p = sub.add_parser("upsert-job-opening",
-                       help="create-or-verify a job opening (key: company + title)")
+                       help="create-or-verify a job opening (key: company "
+                            "+ title + link; the no-url form refuses a "
+                            "title carrying several postings)")
     p.add_argument("--db", required=True)
     p.add_argument("--company", required=True)
     p.add_argument("--title", required=True)
@@ -2816,6 +3036,9 @@ def main(argv=None):
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--plan")
     g.add_argument("--plan-file", dest="plan_file")
+    g.add_argument("--example", action="store_true",
+                   help="print the runnable sample plan (the one the "
+                        "STANDARDS ops row carries) and exit")
 
     p = sub.add_parser("upsert-person", help="create-or-verify the single person row")
     p.add_argument("--db", required=True)
@@ -2976,6 +3199,9 @@ def main(argv=None):
               "dropped=%s" % (res["applications"], res["events"],
                               res["instructions_remapped"],
                               ",".join(res["dropped"])))
+    elif args.op == "repair":
+        res = repair(args.db)
+        print("linked=%d" % res["linked"])
     elif args.op == "migrate":
         counts = migrate(args.db, args.ledger, logs_dir=args.logs_dir)
         print(
@@ -2984,7 +3210,8 @@ def main(argv=None):
         )
     elif args.op == "log-event":
         eid = log_event(args.db, args.date, args.etype, args.company, args.role,
-                        args.channel, args.outcome, args.note)
+                        args.channel, args.outcome, args.note,
+                        url=args.url)
         print("event %d" % eid)
     elif args.op == "log-run":
         rid = log_run(args.db, args.hat, args.date, args.task, args.action,
@@ -3019,9 +3246,11 @@ def main(argv=None):
         print("wrote %s" % (args.out,))
     elif args.op == "status":
         rows = status(args.db, company=args.company, live=args.live)
-        print("company\trole\tstatus\tstatus_date\treq")
-        for company, role, st, sd, req, _le in rows:
-            print("%s\t%s\t%s\t%s\t%s" % (company, role, st, sd, req or ""))
+        print("company\trole\tstatus\tstatus_date\treq\tlast_activity")
+        for company, role, st, sd, req, _le, ad, at, ao in rows:
+            act = ("%s %s/%s" % (ad, at, ao)) if ad else ""
+            print("%s\t%s\t%s\t%s\t%s\t%s"
+                  % (company, role, st, sd, req or "", act))
     elif args.op == "caps":
         for company, count in caps(args.db, company=args.company):
             print("%s\t%d" % (company, count))
@@ -3054,9 +3283,12 @@ def main(argv=None):
                                 args.application_id, args.summary)
         print("id %d" % rowid)
     elif args.op == "query":
-        plan = args.plan if args.plan is not None else \
-            pathlib.Path(args.plan_file).read_text(encoding="utf-8")
-        print(json.dumps(query(args.db, plan), indent=2))
+        if args.example:
+            print(EXAMPLE_PLAN)
+        else:
+            plan = args.plan if args.plan is not None else \
+                pathlib.Path(args.plan_file).read_text(encoding="utf-8")
+            print(json.dumps(query(args.db, plan), indent=2))
     elif args.op == "upsert-person":
         rowid = upsert_person(args.db, args.full_name, args.objective,
                               args.location, as_user=(args.as_user_flag != "ai"))

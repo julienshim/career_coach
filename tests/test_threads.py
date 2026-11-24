@@ -20,7 +20,7 @@ class TestApplicationStatus(unittest.TestCase):
         # The derived status (the view over the new tables): the same
         # values the v1 threads carried for the same fixture.
         rows = store.status(self.db)
-        got = {(c, r): (s, sd) for c, r, s, sd, req, le in rows}
+        got = {(c, r): (s, sd) for c, r, s, sd, req, le, *_act in rows}
         self.assertEqual(got[("Acme", "Data Pipeline Engineer")], ("rejected", "3/5/2026"))
         self.assertEqual(got[("Acme", "Search Infra Engineer")], ("advanced", "3/4/2026"))
         self.assertEqual(got[("Initech", "Data Engineer")], ("submitted", "3/2/2026"))
@@ -39,7 +39,8 @@ class TestApplicationStatus(unittest.TestCase):
         self.assertEqual(row[5], 7)
 
     def test_req_derived_from_status_setting_notes(self):
-        by_pair = {(c, r): req for c, r, s, sd, req, le in store.status(self.db)}
+        by_pair = {(c, r): req for c, r, s, sd, req, le, *_act in
+                   store.status(self.db)}
         self.assertEqual(by_pair[("Acme", "Data Pipeline Engineer")], "1001")
         self.assertIsNone(by_pair[("Acme", "Search Infra Engineer")])
 
