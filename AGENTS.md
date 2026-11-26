@@ -37,6 +37,8 @@ Summarized — the canonical wording lives in `standards/STANDARDS.md` (the oper
 - NDA-clean. No internal codenames external.
 - No overclaim. Gaps live in the Q&A, never the resume.
 - Gatekeeper, realism over flattery.
+- **Classify before you pull.** Every request is a class (operational / analytical / creative / structural) before any context is pulled; the class fixes the context budget and the budget is a stop, not a target — the store's ops are the sanctioned read path, not the raw exports. Table: `standards/STANDARDS.md` § The execution rules.
+- **The clock rule.** A stated deadline (a time, "QUICKLY", "before X") is the binding budget: the first op is `date`, the second calibrates, and every projection runs from the latest read plus the output since, at the observed rate. The plan targets deadline − buffer on a tier schedule committed in the first reply — work not in the schedule (a "one more check") is cut, not added. Full mechanics: `standards/STANDARDS.md` § The clock rule.
 - The full rules and the answer voice are in `standards/STANDARDS.md`. The person-specific facts (test counts, NDA list, banned claims) are in `instance/profile.md`; the tunables (floor, pace, follow-up cadence) are in `instance/config.md`.
 
 ## The loop (how a job gets handled)

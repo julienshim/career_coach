@@ -19,7 +19,7 @@
 - `instance/market-intel.md` — external lane/market signals (what's in demand, agency vs direct dynamics, pipeline timing) for the lane read.
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User brings a clue (an outcome, an instinct, a new option) → the agent reads the record (the ledger, the lane file; a cross-entity question goes through the store's `query` op — retrieve first, then reason) and outputs the lane read or the placement call. No file writes.
 2. User decides; when the strategy actually changes, the agent writes the change back to the strategy unit in one pass and logs the row.
 

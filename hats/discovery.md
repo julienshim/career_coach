@@ -15,7 +15,7 @@
 - The new user's raw material (their code dir, their history, their words).
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. **Interview.** The user's story in their words: the origin, the work, the gaps they found, the tool they built, the staying power.
 2. **Examine the work.** Read the actual artifacts. What is real, what is the receipt.
 3. **Build the evidence.** EVIDs for every claimable thing. The ground truth.

@@ -19,7 +19,8 @@
 - `standards/STANDARDS.md` — the answer voice.
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Deadline runs.** When the request carries a deadline (a call time, "QUICKLY"), the clock rule binds: the tier schedule is committed in the first reply (phone call: the card, the opener, the two risk questions — first; the rest by T2), the minimum artifact is written in the same turn the budget pull finishes, and each later tier starts only from a fresh clock read.
 1. User says a company has an interview (round plus date) → the agent pulls the company's submitted QA, the standard screen answers, and the existing company file, and outputs the prep in one pass.
 2. User reviews; the agent revises in chat.
 3. After the round the user reports the outcome → the agent logs it (the store's `log-event` — the application status flip rides the op — plus the application hub README at `instance/interviews/<company>/README.md`) and, on a confirmed rejection, runs the distillation. This is an operational run: reads are the store and the current application's hub only — no career-map unit as context. Anything that looks like a broader cleanup is a suggestion named in the `log-run` row, not an action in this run.

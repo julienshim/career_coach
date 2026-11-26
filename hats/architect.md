@@ -15,7 +15,7 @@
 - The file that should own the truth (to confirm the single source).
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User names the smell (or a test run exposes one) → the agent walks the tree for that class of defect and outputs the findings plus the fix, ranked. No fixes in this pass.
 2. User approves the fixes → they are executed in one batch, then the agent re-scans to verify, and the findings file gains a dated status line (executed, the open remainder) so it stops reading as open.
 3. The decision lands in the audit trail plus the architect log row.

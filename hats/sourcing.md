@@ -23,7 +23,7 @@
 - `standards/STANDARDS.md` — the answer voice, the operating rules, the store ops.
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. **Step 0 pre-check.** Cross-reference every company in the batch against `companies.md` and the store (`caps` — application counts; `status` — application states). Match the posting's link (or req ID) against the store's known postings (`query` on `job_opening` by `url` / `posted_comp` / `jd_ref`) before the fresh / different-role / re-apply call: a posting already known carries its application's state in the store — a re-surfaced posting (reposted, or the same link under a new title) is classified from its stored application, not from the prose. Surface a re-apply before the user submits.
 2. **Short-circuit.** Red flags and hard gates. Stop if one fires:
     - Anonymous posting with no company name on a third-party board.

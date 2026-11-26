@@ -15,6 +15,7 @@ python3 stdlib only. No dependencies.
 
 import argparse
 import datetime
+import difflib
 import hashlib
 import json
 import os
@@ -620,7 +621,7 @@ def _find_application(conn, company_raw, role):
     row = conn.execute(
         "SELECT a.id FROM application a "
         "JOIN company c ON a.company_id = c.id "
-        "WHERE c.name = ? AND TRIM(a.role) = ?",
+        "WHERE LOWER(c.name) = LOWER(?) AND TRIM(a.role) = ?",
         (key, role.strip())).fetchone()
     return row[0] if row else None
 
@@ -639,7 +640,13 @@ def _resolve_application(conn, company_raw, role):
     key = company_key(company_raw)
     if key == "n/a" or role == "n/a":
         return None
-    cid = _upsert(conn, "company", {"name": key}, {}, {})
+    # A case-drifted key reuses the existing company: the ledger's
+    # vocabulary is case-insensitive, so "globex" is not a second
+    # company next to "Globex".
+    row = conn.execute(
+        "SELECT id FROM company WHERE LOWER(name) = LOWER(?)",
+        (key,)).fetchone()
+    cid = row[0] if row else _upsert(conn, "company", {"name": key}, {}, {})
     cur = conn.execute(
         "INSERT INTO application (company_id, role, created_at) "
         "VALUES (?, ?, ?)", (cid, role.strip(), _today_iso()))
@@ -667,7 +674,7 @@ def _link_orphans(conn):
     byte-stable. Returns the number of events linked."""
     match = ("SELECT MIN(a.id) FROM application a "
              "JOIN company c ON a.company_id = c.id "
-             "WHERE c.name = event.company_key "
+             "WHERE LOWER(c.name) = LOWER(event.company_key) "
              "AND TRIM(a.role) = TRIM(event.role)")
     cur = conn.execute(
         "UPDATE event SET application_id = (" + match + ") "
@@ -1165,7 +1172,7 @@ def status(db_path, company=None, live=False):
                 reqs[aid] = m.group(1)
         out = []
         for aid, comp, role, st, le, ae, at, ao in rows:
-            if company and comp != company:
+            if company and comp.lower() != company.lower():
                 continue
             if live and st in ("rejected", "closed"):
                 continue
@@ -1191,8 +1198,34 @@ def caps(db_path, company=None):
     for (k,) in rows:
         counts[k] = counts.get(k, 0) + 1
     if company:
-        counts = {k: v for k, v in counts.items() if k == company}
+        counts = {k: v for k, v in counts.items() if k.lower() == company.lower()}
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def near_companies(db_path, name):
+    """Company names near `name` that are not a case-insensitive match of
+    it — the no-match companion to the case-insensitive filters: a typo or
+    wrong-case key surfaces the candidates instead of a silent empty
+    result. Close matches first (difflib, cutoff 0.6), then substring
+    matches; deduped, at most 5, canonical spellings as stored."""
+    conn = db_connect(db_path)
+    try:
+        names = [r[0] for r in conn.execute(
+            "SELECT name FROM company ORDER BY name").fetchall()]
+    finally:
+        conn.close()
+    low = name.lower()
+    names = [n for n in names if n.lower() != low]
+    out = []
+    for n in difflib.get_close_matches(name, names, n=5, cutoff=0.6):
+        if n not in out:
+            out.append(n)
+    for n in names:
+        if len(out) == 5:
+            break
+        if low in n.lower() or n.lower() in low:
+            out.append(n)
+    return out[:5]
 
 
 # ---- Operational entity ops (Phase 2) --------------------------------------
@@ -3251,6 +3284,11 @@ def main(argv=None):
             act = ("%s %s/%s" % (ad, at, ao)) if ad else ""
             print("%s\t%s\t%s\t%s\t%s\t%s"
                   % (company, role, st, sd, req or "", act))
+        if args.company and not rows:
+            near = near_companies(args.db, args.company)
+            if near:
+                print("no company matching %r; near: %s"
+                      % (args.company, ", ".join(near)), file=sys.stderr)
     elif args.op == "caps":
         for company, count in caps(args.db, company=args.company):
             print("%s\t%d" % (company, count))

@@ -97,7 +97,7 @@ Source: the (UN)ROMANTIC SCANTRON. This is the durable writing standard for ever
 
 ## The execution rules
 
-The operating rules above bind how a run thinks. These eight bind how a run *reaches*: what it pulls, what it writes, and which of the user's directives it applies. Each names its mechanism, so a run either obeys it or visibly breaks it.
+The operating rules above bind how a run thinks. These nine bind how a run *reaches*: what it pulls, what it writes, and which of the user's directives it applies. Each names its mechanism, so a run either obeys it or visibly breaks it.
 
 **The task classes.** Every request is classified into one class *before* any context is pulled. The class fixes the context budget (what the run may pull) and the closed write-scope (what the run may write).
 
@@ -110,6 +110,10 @@ The operating rules above bind how a run thinks. These eight bind how a run *rea
 
 - **Classify before you pull.** The classification happens before context is pulled; it fixes the budget and the write-scope for the run.
 - **The budget is a stop, not a target.** A run that needs context outside its budget stops and either completes with what it has, asks one targeted question, or names the task as a different class. It does not silently widen.
+- **The clock rule.** A run with a stated deadline (a time, "QUICKLY", "before X") treats remaining time as the binding budget — tighter than the context budget. The run cannot feel generation time: at its observed rate, every thinking token is wall time it will never experience. Time is managed by three mechanics, not by attention:
+  - **Calibrate before planning.** The first op is `date`, then the first work unit, then `date` again. The gap is the run's real speed (generation + tools). Every projection uses the observed rate, never an assumed one.
+  - **Scan while the ball is in the air.** A projection is computed from the latest `date` read plus the output since, at the observed rate — never from the last read alone. A chunk projected to take ≥1 minute gets a fresh read before it starts; ~2K tokens of output since the last read forces a re-read.
+  - **Plan against deadline − buffer, on a committed schedule.** The buffer = one re-read + the minimum artifact's finish time at the observed rate (floor 2 minutes). The moment the deadline is detected, the tier schedule is committed in writing — minimum artifact by T1, each further tier by Tn — and from then on it is only executed and only revised downward. Work not in the schedule (a "one more check") is a violation: it is cut, not added. A run that cannot cut further says so in one sentence with the time it needs, and stops — it does not keep going silently past the deadline.
 - **Closed write-scope.** A run writes only to its class's named files and tables. Anything outside the write-scope is a suggestion (the rule below), never an action in the current run.
 - **Operational never pulls the career-map.** A log / flip / export run reads only the store and the current application's hub. The flip writes its named state files; beyond them, nothing. There is no career-map pull to balloon.
 - **Escalation is a suggestion, not an expansion.** An improvement spotted mid-run (a reorganization, a stale file, a missing link) is written as a suggestion — a line in the run's `log-run` row explicitly marked a suggestion — and surfaced to the user. It is never executed inside the current run. Reorganization is the structural class under its own explicit request.

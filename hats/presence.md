@@ -15,7 +15,7 @@
 - `instance/social-media/` — the surfaces: `LinkedIn.md` (the LinkedIn profile — NDA-clean, safe to publish; experience verbatim from the default resume), `GitHub.md`, `Portfolio.md` (the living spec).
 
 **The process.**
-**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the seven rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
+**Classify before you pull.** The request is classified into a class (operational / analytical / creative / structural — the table and the nine rules in `standards/STANDARDS.md` § The execution rules) before any context is pulled; the class fixes the context budget and the closed write-scope for this run.
 1. User names the change (a surface, a voice edit, a lane change) → the agent pulls the voice + the active lane, writes the spec copy in the register, and runs the scantron. No deploy.
 2. User reviews the copy; the agent revises in chat.
 3. User pastes it live and confirms → the agent syncs the surface file in the instance (the single source of what is live) and logs the row.
